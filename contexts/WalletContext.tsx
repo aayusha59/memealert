@@ -35,6 +35,7 @@ interface WalletContextType {
   refreshUserData: () => Promise<void>
   reloadAlerts: () => Promise<void>
   updateAlertNotification: (alertId: string, notificationsEnabled: boolean) => Promise<void>
+  updateAlertMetrics: (alertId: string, metrics: any) => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined)
@@ -263,6 +264,34 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     }
   }, [userId])
 
+  // Update specific alert metrics in context
+  const updateAlertMetrics = useCallback(async (alertId: string, metrics: any) => {
+    if (!userId) {
+      console.error('❌ Cannot update alert metrics: no userId')
+      return
+    }
+
+    try {
+      // Update in database
+      const { updateAlertMetrics: updateMetrics } = await import('@/lib/supabase')
+      await updateMetrics(alertId, metrics)
+      
+      // Update local state
+      setAlerts(prevAlerts => 
+        prevAlerts.map(alert => 
+          alert.id === alertId 
+            ? { ...alert, metrics } 
+            : alert
+        )
+      )
+      
+      console.log('✅ Alert metrics updated in context:', alertId, metrics)
+    } catch (error) {
+      console.error("Error updating alert metrics in context:", error)
+      throw error
+    }
+  }, [userId])
+
   const saveAlerts = useCallback(async (newAlerts: any[]) => {
     if (!userId) {
       console.error('❌ Cannot save alerts: no userId', { userId, newAlerts })
@@ -331,7 +360,8 @@ function WalletContextInner({ children }: { children: ReactNode }) {
       checkConnectionStatus,
       refreshUserData,
       reloadAlerts,
-      updateAlertNotification
+      updateAlertNotification,
+      updateAlertMetrics
     }}>
       {children}
     </WalletContext.Provider>
