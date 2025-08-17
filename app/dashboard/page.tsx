@@ -33,6 +33,8 @@ import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/contexts/WalletContext"
 import { toast } from "sonner"
 import { DatabaseTest } from "@/components/DatabaseTest"
+import { WalletConnectButton } from "@/components/WalletConnectButton"
+import PhoneVerification from "@/components/Settings/PhoneVerification"
 import { deleteUserAlert, saveNotificationSettings, updateAlertNotificationStatus, cleanupDuplicateAlertMetrics, cleanupDuplicateNotificationSettings, cleanupDuplicatePhoneVerifications } from "@/lib/supabase"
 
 interface TokenResult {
@@ -92,7 +94,8 @@ export default function Dashboard() {
     updateAlertMetrics: updateContextAlertMetrics
   } = useWallet()
   
-  const [showWalletModal, setShowWalletModal] = useState(false)
+
+  const [showVerificationPopup, setShowVerificationPopup] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<TokenResult[]>([])
@@ -117,11 +120,17 @@ export default function Dashboard() {
   const [volumePeriod, setVolumePeriod] = useState("5m")
   const [volumeThreshold, setVolumeThreshold] = useState(100000)
 
-  const [phoneNumber, setPhoneNumber] = useState(contextPhoneNumber || "")
-  const [verificationCode, setVerificationCode] = useState("")
-  const [isVerifying, setIsVerifying] = useState(false)
-  const [isPhoneVerified, setIsPhoneVerified] = useState(contextIsPhoneVerified)
-  const [verificationStep, setVerificationStep] = useState<"phone" | "code" | "verified">(contextVerificationStep)
+  // Phone verification state is now handled by the PhoneVerification component
+
+  // Debug context values
+  console.log('🔍 Context values:', {
+    contextPhoneNumber,
+    contextIsPhoneVerified,
+    contextVerificationStep,
+    contextPushEnabled,
+    contextSmsEnabled,
+    contextCallsEnabled
+  });
 
   const [pushEnabled, setPushEnabled] = useState(contextPushEnabled)
   const [smsEnabled, setSmsEnabled] = useState(contextSmsEnabled)
@@ -198,7 +207,6 @@ export default function Dashboard() {
     
     if (!isWalletConnected) {
       toast.error("Please connect your wallet first");
-      setShowWalletModal(true);
       return;
     }
 
@@ -393,13 +401,24 @@ export default function Dashboard() {
 
   // Sync context values with local state when they change
   useEffect(() => {
-    setPhoneNumber(contextPhoneNumber || "")
-    setIsPhoneVerified(contextIsPhoneVerified)
-    setVerificationStep(contextVerificationStep)
     setPushEnabled(contextPushEnabled)
     setSmsEnabled(contextSmsEnabled)
     setCallsEnabled(contextCallsEnabled)
-  }, [contextPhoneNumber, contextIsPhoneVerified, contextVerificationStep, contextPushEnabled, contextSmsEnabled, contextCallsEnabled])
+  }, [contextPushEnabled, contextSmsEnabled, contextCallsEnabled])
+
+  // Automatically disable SMS and Calls if phone verification is lost
+  useEffect(() => {
+    if (!contextIsPhoneVerified && (smsEnabled || callsEnabled)) {
+      setSmsEnabled(false);
+      setCallsEnabled(false);
+      // Update context and database
+      if (userId) {
+        const newSettings = { pushEnabled, smsEnabled: false, callsEnabled: false };
+        setNotificationSettings(newSettings);
+        saveNotificationSettings(userId, newSettings).catch(console.error);
+      }
+    }
+  }, [contextIsPhoneVerified, smsEnabled, callsEnabled, userId, pushEnabled, setNotificationSettings])
 
   // Sync alerts from context when they change (important for page refresh)
   // Only sync when not editing and when alerts are actually different
@@ -443,93 +462,19 @@ export default function Dashboard() {
     )
   }
 
-  const handleConnectWallet = async (walletType: string) => {
-    try {
-      await refreshUserData()
-      setShowWalletModal(false)
-    } catch (error) {
-      console.error("Failed to connect wallet:", error)
-    }
-  }
 
-  const sendVerificationCode = async () => {
-    if (!phoneNumber) return
-    if (!isWalletConnected || !userId) {
-      toast.error("Please connect your wallet first");
-      setShowWalletModal(true);
-      return;
-    }
 
-    setIsVerifying(true)
-    try {
-      const response = await fetch("/api/send-verification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber, userId }),
-      })
-
-      if (response.ok) {
-        setVerificationStep("code")
-        toast.success("Verification code sent");
-      } else {
-        const data = await response.json();
-        toast.error(data.error || "Failed to send verification code");
-      }
-    } catch (error) {
-      toast.error("Error sending verification code");
-      console.error("Error sending verification code:", error);
-    } finally {
-      setIsVerifying(false)
-    }
-  }
-
-  const verifyCode = async () => {
-    if (!verificationCode) return
-    if (!isWalletConnected || !userId) {
-      toast.error("Please connect your wallet first");
-      return;
-    }
-
-    setIsVerifying(true)
-    try {
-      const response = await fetch("/api/verify-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber, code: verificationCode, userId }),
-      })
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setIsPhoneVerified(true)
-          setVerificationStep("verified")
-          setPhoneVerified(true, phoneNumber)
-          toast.success("Phone number verified successfully");
-          // Update notification settings to enable SMS
-          setSmsEnabled(true);
-          setNotificationSettings({
-            pushEnabled,
-            smsEnabled: true,
-            callsEnabled
-          });
-        } else {
-          toast.error("Invalid verification code");
-        }
-      } else {
-        const data = await response.json();
-        toast.error(data.error || "Failed to verify code");
-      }
-    } catch (error) {
-      toast.error("Error verifying code");
-      console.error("Error verifying code:", error);
-    } finally {
-      setIsVerifying(false)
-    }
-  }
+  // Phone verification is now handled by the PhoneVerification component
 
   const handleNotificationSettingChange = async (setting: 'push' | 'sms' | 'calls', enabled: boolean) => {
     if (!userId) {
       toast.error("User not authenticated");
+      return;
+    }
+
+    // Check if user is trying to enable SMS or Calls without phone verification
+    if ((setting === 'sms' || setting === 'calls') && enabled && !contextIsPhoneVerified) {
+      setShowVerificationPopup(true);
       return;
     }
 
@@ -580,24 +525,7 @@ export default function Dashboard() {
     }
   }
 
-  const changePhoneNumber = async () => {
-    setPhoneNumber("")
-    setIsPhoneVerified(false)
-    setVerificationStep("phone")
-    setPhoneVerified(false, "")
-    setSmsEnabled(false)
-    setCallsEnabled(false)
-    setNotificationSettings({
-      pushEnabled,
-      smsEnabled: false,
-      callsEnabled: false
-    });
-    
-    // Refresh user data to ensure everything is in sync
-    await refreshUserData();
-    
-    setShowSettings(false)
-  }
+  // Phone number changes are now handled by the PhoneVerification component
 
   return (
     <div className="min-h-screen bg-background">
@@ -617,7 +545,9 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowSettings(true)} className="flex items-center gap-2">
+                          <Button variant="outline" onClick={() => {
+                setShowSettings(true);
+              }} className="flex items-center gap-2">
               <Settings className="size-4" />
               Settings
             </Button>
@@ -636,10 +566,9 @@ export default function Dashboard() {
                 {walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : 'Disconnect'}
               </Button>
             ) : (
-              <Button onClick={() => setShowWalletModal(true)} className="flex items-center gap-2">
-                <Wallet className="size-4" />
-                Connect Wallet
-              </Button>
+              <div data-wallet-button className="flex justify-center">
+                <WalletConnectButton />
+              </div>
             )}
           </div>
         </div>
@@ -718,14 +647,14 @@ export default function Dashboard() {
           </div>
         ) : !isWalletConnected ? (
           <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <Wallet className="size-16 mx-auto mb-4 text-muted-foreground" />
-              <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
-              <p className="text-muted-foreground mb-4">Connect your Solana wallet to view and manage your alerts</p>
-              <Button onClick={() => setShowWalletModal(true)}>
-                Connect Wallet
-              </Button>
-            </div>
+                          <div className="text-center">
+                <Wallet className="size-16 mx-auto mb-4 text-muted-foreground" />
+                <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
+                <p className="text-muted-foreground mb-4">Connect your Solana wallet to view and manage your alerts</p>
+                <div data-wallet-connect-center className="flex justify-center">
+                  <WalletConnectButton />
+                </div>
+              </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -831,50 +760,16 @@ export default function Dashboard() {
                       <Switch checked={smsEnabled} onCheckedChange={(enabled) => handleNotificationSettingChange('sms', enabled)} />
                     </div>
                     <p className="text-sm text-muted-foreground">Text messages with token and metric updates</p>
-                    {smsEnabled && (
-                      <div className="space-y-2">
-                        {verificationStep === "phone" && (
-                          <div className="space-y-2">
-                            <input
-                              type="tel"
-                              placeholder="Enter phone number"
-                              value={phoneNumber}
-                              onChange={(e) => setPhoneNumber(e.target.value)}
-                              className="w-full px-3 py-2 bg-background border rounded-md text-sm"
-                            />
-                            <button
-                              onClick={sendVerificationCode}
-                              disabled={isVerifying || !phoneNumber}
-                              className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm disabled:opacity-50"
-                            >
-                              {isVerifying ? "Sending..." : "Send Code"}
-                            </button>
-                          </div>
-                        )}
-                        {verificationStep === "code" && (
-                          <div className="space-y-2">
-                            <input
-                              type="text"
-                              placeholder="Enter verification code"
-                              value={verificationCode}
-                              onChange={(e) => setVerificationCode(e.target.value)}
-                              className="w-full px-3 py-2 bg-background border rounded-md text-sm"
-                            />
-                            <button
-                              onClick={verifyCode}
-                              disabled={isVerifying || !verificationCode}
-                              className="w-full px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm disabled:opacity-50"
-                            >
-                              {isVerifying ? "Verifying..." : "Verify"}
-                            </button>
-                          </div>
-                        )}
-                        {verificationStep === "verified" && (
-                          <div className="text-sm text-green-500 flex items-center gap-1">
-                            <Check className="size-4" />
-                            Phone verified: {phoneNumber}
-                          </div>
-                        )}
+                    {smsEnabled && contextIsPhoneVerified && (
+                      <div className="text-sm text-green-500 flex items-center gap-1">
+                        <Check className="size-4" />
+                        SMS enabled for verified number: {contextPhoneNumber}
+                      </div>
+                    )}
+                    {smsEnabled && !contextIsPhoneVerified && (
+                      <div className="text-sm text-amber-500 flex items-center gap-1">
+                        <XCircle className="size-4" />
+                        Phone number must be verified to enable SMS
                       </div>
                     )}
                   </div>
@@ -888,8 +783,17 @@ export default function Dashboard() {
                       <Switch checked={callsEnabled} onCheckedChange={(enabled) => handleNotificationSettingChange('calls', enabled)} />
                     </div>
                     <p className="text-sm text-muted-foreground">Voice calls for critical alerts and wake-up alarms</p>
-                    {callsEnabled && !isPhoneVerified && (
-                      <div className="text-sm text-muted-foreground">Enable SMS first to verify your phone number</div>
+                    {callsEnabled && contextIsPhoneVerified && (
+                      <div className="text-sm text-green-500 flex items-center gap-1">
+                        <Check className="size-4" />
+                        Calls enabled for verified number: {contextPhoneNumber}
+                      </div>
+                    )}
+                    {callsEnabled && !contextIsPhoneVerified && (
+                      <div className="text-sm text-amber-500 flex items-center gap-1">
+                        <XCircle className="size-4" />
+                        Phone number must be verified to enable calls
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1139,35 +1043,40 @@ export default function Dashboard() {
         </div>
         )}
 
-        {showWalletModal && (
+
+
+        {/* Phone Verification Required Popup */}
+        {showVerificationPopup && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <Card className="w-full max-w-md">
               <CardHeader>
-                <CardTitle>Connect Wallet</CardTitle>
-                <p className="text-sm text-muted-foreground">Choose your preferred Solana wallet</p>
+                <CardTitle className="flex items-center gap-2">
+                  <Phone className="size-5 text-amber-500" />
+                  Phone Verification Required
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  You must verify your phone number before you can access these features.
+                </p>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { name: "Phantom", id: "phantom", icon: "👻" },
-                  { name: "Solflare", id: "solflare", icon: "🔥" },
-                  { name: "Backpack", id: "backpack", icon: "🎒" },
-                  { name: "Glow", id: "glow", icon: "✨" },
-                ].map((wallet) => (
-                  <Button
-                    key={wallet.id}
-                    variant="outline"
-                    className="w-full justify-start h-12 bg-transparent"
-                    onClick={() => handleConnectWallet(wallet.id)}
-                    disabled={isLoading}
+              <CardContent className="space-y-4">
+                <div className="flex gap-3">
+                  <Button 
+                    onClick={() => {
+                      setShowVerificationPopup(false);
+                      setShowSettings(true);
+                    }}
+                    className="flex-1"
                   >
-                    <span className="text-lg mr-3">{wallet.icon}</span>
-                    {wallet.name}
-                    {isLoading && <Loader2 className="ml-2 size-4 animate-spin" />}
+                    Go to Settings
                   </Button>
-                ))}
-                <Button variant="ghost" className="w-full mt-4" onClick={() => setShowWalletModal(false)}>
-                  Cancel
-                </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowVerificationPopup(false)}
+                    className="flex-1"
+                  >
+                    Close
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1185,22 +1094,7 @@ export default function Dashboard() {
 
               <div className="space-y-4">
                 <div className="p-4 rounded-lg border">
-                  <h4 className="font-medium mb-2">Phone Number</h4>
-                  {isPhoneVerified ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Check className="size-4 text-green-500" />
-                        <span>Verified: {phoneNumber}</span>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={changePhoneNumber} className="w-full bg-transparent">
-                        Change Phone Number
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      No phone number verified. Enable SMS alerts to add your phone number.
-                    </div>
-                  )}
+                  <PhoneVerification />
                 </div>
 
                 <div className="p-4 rounded-lg border">
@@ -1231,21 +1125,59 @@ export default function Dashboard() {
                         <Smartphone className="size-4 text-primary" />
                         <span className="text-sm">Push Notifications</span>
                       </div>
-                      <Switch defaultChecked />
+                      <Switch checked={pushEnabled} onCheckedChange={(enabled) => handleNotificationSettingChange('push', enabled)} />
                     </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex items-center gap-2">
-                        <MessageSquare className="size-4 text-green-500" />
-                        <span className="text-sm">SMS Alerts</span>
+                    
+                    <div className="p-3 rounded-lg border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="size-4 text-green-500" />
+                          <span className="text-sm">SMS Alerts</span>
+                        </div>
+                        <Switch 
+                          checked={smsEnabled} 
+                          onCheckedChange={(enabled) => handleNotificationSettingChange('sms', enabled)}
+                          disabled={!contextIsPhoneVerified}
+                        />
                       </div>
-                      <Switch />
+                      {!contextIsPhoneVerified && (
+                        <div className="text-xs text-amber-600 flex items-center gap-1">
+                          <XCircle className="size-3" />
+                          <span>Verify your phone number to enable SMS alerts</span>
+                        </div>
+                      )}
+                      {contextIsPhoneVerified && smsEnabled && (
+                        <div className="text-xs text-green-600 flex items-center gap-1">
+                          <Check className="size-3" />
+                          <span>SMS enabled for {contextPhoneNumber}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex items-center gap-2">
-                        <Phone className="size-4 text-red-500" />
-                        <span className="text-sm">Phone Calls</span>
+
+                    <div className="p-3 rounded-lg border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Phone className="size-4 text-red-500" />
+                          <span className="text-sm">Phone Calls</span>
+                        </div>
+                        <Switch 
+                          checked={callsEnabled} 
+                          onCheckedChange={(enabled) => handleNotificationSettingChange('calls', enabled)}
+                          disabled={!contextIsPhoneVerified}
+                        />
                       </div>
-                      <Switch />
+                      {!contextIsPhoneVerified && (
+                        <div className="text-xs text-amber-600 flex items-center gap-1">
+                          <XCircle className="size-3" />
+                          <span>Verify your phone number to enable phone call alerts</span>
+                        </div>
+                      )}
+                      {contextIsPhoneVerified && callsEnabled && (
+                        <div className="text-xs text-green-600 flex items-center gap-1">
+                          <Check className="size-3" />
+                          <span>Calls enabled for {contextPhoneNumber}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

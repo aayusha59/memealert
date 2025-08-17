@@ -120,7 +120,7 @@ export async function saveUserAlerts(userId: string, alerts: any[]) {
     const { data, error } = await supabase
       .from('alerts')
       .insert(alertsWithUserId)
-      .select('id')
+      .select('*')
 
     if (error) {
       console.error('❌ Error inserting alerts:', error)
@@ -156,7 +156,8 @@ export async function saveUserAlerts(userId: string, alerts: any[]) {
       }
     }
 
-    return data
+    // Return the saved alerts with their database IDs
+    return await getUserAlerts(userId)
   } catch (error) {
     console.error('❌ Error in saveUserAlerts:', error)
     throw error
@@ -200,15 +201,24 @@ export async function getUserAlerts(userId: string) {
       price: alert.price,
       notificationsEnabled: alert.notifications_enabled,
       metrics: metricsData ? {
-        marketCapEnabled: metricsData.market_cap_enabled,
-        priceChangeEnabled: metricsData.price_change_enabled,
-        volumeEnabled: metricsData.volume_enabled,
-        marketCapHigh: metricsData.market_cap_high,
-        marketCapLow: metricsData.market_cap_low,
-        priceChangeThreshold: metricsData.price_change_threshold,
-        volumeThreshold: metricsData.volume_threshold,
-        volumePeriod: metricsData.volume_period
-      } : {}
+        marketCapEnabled: metricsData.market_cap_enabled || false,
+        priceChangeEnabled: metricsData.price_change_enabled || false,
+        volumeEnabled: metricsData.volume_enabled || false,
+        marketCapHigh: metricsData.market_cap_high || 1000000,
+        marketCapLow: metricsData.market_cap_low || 500000,
+        priceChangeThreshold: metricsData.price_change_threshold || 20,
+        volumeThreshold: metricsData.volume_threshold || 100000,
+        volumePeriod: metricsData.volume_period || "24h"
+      } : {
+        marketCapEnabled: false,
+        priceChangeEnabled: false,
+        volumeEnabled: false,
+        marketCapHigh: 1000000,
+        marketCapLow: 500000,
+        priceChangeThreshold: 20,
+        volumeThreshold: 100000,
+        volumePeriod: "24h"
+      }
     })
   }
 
