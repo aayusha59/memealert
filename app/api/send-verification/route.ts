@@ -17,10 +17,12 @@ export async function POST(request: NextRequest) {
     }
     
     // Ensure the phone number is in E.164 format (starts with +)
-    if (!phoneNumber.startsWith('+')) {
-      console.error('❌ Phone number is not in E.164 format:', phoneNumber)
-      return NextResponse.json({ 
-        error: "Invalid phone number format. Phone number must start with + sign followed by country code." 
+    // Sanitize phone number and ensure it is in E.164 format
+    const sanitizedPhoneNumber = phoneNumber.replace(/[^\d+]/g, '')
+    if (!/^\+[1-9]\d{1,14}$/.test(sanitizedPhoneNumber)) {
+      console.error('❌ Phone number is not in valid E.164 format:', phoneNumber)
+      return NextResponse.json({
+        error: "Invalid phone number format. Phone number must be digits only and start with a + sign."
       }, { status: 400 })
     }
 
@@ -31,10 +33,10 @@ export async function POST(request: NextRequest) {
     })
 
     // Generate a verification code using Twilio service
-    const verification = await sendVerificationCode(phoneNumber)
+    const verification = await sendVerificationCode(sanitizedPhoneNumber)
 
     // Save the verification attempt to Supabase
-    await savePhoneVerification(userId, phoneNumber)
+    await savePhoneVerification(userId, sanitizedPhoneNumber)
 
     console.log('✅ Twilio verification created successfully:', verification.status)
     return NextResponse.json({ success: true, status: verification.status })

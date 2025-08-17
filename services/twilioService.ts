@@ -30,6 +30,10 @@ function getTwilioClient() {
 export async function sendVerificationCode(phoneNumber: string): Promise<any> {
   try {
     console.log('📱 Creating Twilio verification for:', phoneNumber);
+    const sanitizedPhoneNumber = phoneNumber.replace(/[^\d+]/g, '');
+    if (!/^\+[1-9]\d{1,14}$/.test(sanitizedPhoneNumber)) {
+      throw new Error('Invalid phone number format');
+    }
     
     // Check if environment variables are set
     if (!process.env.TWILIO_ACCOUNT_SID) {
@@ -71,7 +75,7 @@ export async function sendVerificationCode(phoneNumber: string): Promise<any> {
     const verification = await twilioClient.verify.v2
       .services(process.env.TWILIO_VERIFY_SERVICE_SID)
       .verifications.create({
-        to: phoneNumber,
+        to: sanitizedPhoneNumber,
         channel: "sms",
       });
       
@@ -106,6 +110,10 @@ export async function sendVerificationCode(phoneNumber: string): Promise<any> {
 export async function verifyCode(phoneNumber: string, code: string): Promise<any> {
   try {
     console.log('🔍 Checking Twilio verification code for:', phoneNumber);
+    const sanitizedPhoneNumber = phoneNumber.replace(/[^\d+]/g, '');
+    if (!/^\+[1-9]\d{1,14}$/.test(sanitizedPhoneNumber)) {
+      throw new Error('Invalid phone number format');
+    }
     
     // Check if environment variables are set
     if (!process.env.TWILIO_ACCOUNT_SID) {
@@ -148,7 +156,7 @@ export async function verifyCode(phoneNumber: string, code: string): Promise<any
     const verificationCheck = await twilioClient.verify.v2
       .services(process.env.TWILIO_VERIFY_SERVICE_SID)
       .verificationChecks.create({
-        to: phoneNumber,
+        to: sanitizedPhoneNumber,
         code: code,
       });
       
