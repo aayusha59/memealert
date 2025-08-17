@@ -156,6 +156,21 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     }
   }, [loadUserData])
 
+  // Handle wallet disconnection
+  const handleDisconnect = useCallback(() => {
+    localStorage.removeItem("connectedWallet")
+    setWalletAddress(null)
+    setUserId(null)
+    setIsWalletConnected(false)
+    setAlerts([])
+    setPhoneNumber('')
+    setIsPhoneVerified(false)
+    setVerificationStep('phone')
+    setPushEnabled(true)
+    setSmsEnabled(false)
+    setCallsEnabled(false)
+  }, [])
+
   // Simplified wallet connection handling
   useEffect(() => {
     if (connected && publicKey) {
@@ -171,8 +186,12 @@ function WalletContextInner({ children }: { children: ReactNode }) {
         // Load user data for new connection
         loadUserDataForAddress(address)
       }
+    } else if (!connected && walletAddress) {
+      // Handle disconnection from Solana wallet
+      console.log('🔌 Wallet disconnected, clearing context...')
+      handleDisconnect()
     }
-  }, [connected, publicKey, walletAddress, loadUserDataForAddress])
+  }, [connected, publicKey, walletAddress, loadUserDataForAddress, handleDisconnect])
 
   // Simplified loading state - only show loading during initial mount
   const isActuallyLoading = useMemo(() => {
@@ -300,9 +319,10 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     
     console.log('💾 Saving alerts for user:', userId, 'Alerts:', newAlerts)
     try {
-      await saveUserAlerts(userId, newAlerts)
-      console.log('✅ Alerts saved successfully')
-      setAlerts(newAlerts)
+      const savedAlerts = await saveUserAlerts(userId, newAlerts)
+      console.log('✅ Alerts saved successfully, received back:', savedAlerts)
+      // Use the alerts returned from database with proper IDs
+      setAlerts(savedAlerts || [])
     } catch (error) {
       console.error("Error saving alerts:", error)
     }
@@ -322,21 +342,6 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     setPushEnabled(settings.pushEnabled)
     setSmsEnabled(settings.smsEnabled)
     setCallsEnabled(settings.callsEnabled)
-  }, [])
-
-  // Handle wallet disconnection
-  const handleDisconnect = useCallback(() => {
-    localStorage.removeItem("connectedWallet")
-    setWalletAddress(null)
-    setUserId(null)
-    setIsWalletConnected(false)
-    setAlerts([])
-    setPhoneNumber('')
-    setIsPhoneVerified(false)
-    setVerificationStep('phone')
-    setPushEnabled(true)
-    setSmsEnabled(false)
-    setCallsEnabled(false)
   }, [])
 
   return (
