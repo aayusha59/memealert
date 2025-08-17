@@ -217,23 +217,69 @@ export async function getUserAlerts(userId: string) {
 
 // Helper function to save phone verification data
 export async function savePhoneVerification(userId: string, phoneNumber: string, isVerified: boolean = false) {
-  const { data, error } = await supabase
-    .from('phone_verifications')
-    .upsert({
-      user_id: userId,
-      phone_number: phoneNumber,
-      is_verified: isVerified,
-      verified_at: isVerified ? new Date().toISOString() : undefined
-    })
-    .select('*')
-    .single()
+  console.log('📱 savePhoneVerification called with:', { userId, phoneNumber, isVerified })
+  
+  try {
+    // First, clean up any existing duplicates for this user
+    await cleanupDuplicatePhoneVerifications(userId)
+    
+    // Check if phone verification already exists for this user
+    const { data: existingVerification, error: selectError } = await supabase
+      .from('phone_verifications')
+      .select('id')
+      .eq('user_id', userId)
+      .single()
 
-  if (error) {
-    console.error('Error saving phone verification:', error)
+    if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('❌ Error checking existing phone verification:', selectError)
+      throw selectError
+    }
+
+    if (existingVerification) {
+      // Update existing verification
+      const { data, error: updateError } = await supabase
+        .from('phone_verifications')
+        .update({
+          phone_number: phoneNumber,
+          is_verified: isVerified,
+          verified_at: isVerified ? new Date().toISOString() : undefined
+        })
+        .eq('user_id', userId)
+        .select('*')
+        .single()
+
+      if (updateError) {
+        console.error('❌ Error updating existing phone verification:', updateError)
+        throw updateError
+      }
+
+      console.log('✅ Existing phone verification updated successfully for user:', userId)
+      return data
+    } else {
+      // Insert new verification
+      const { data, error: insertError } = await supabase
+        .from('phone_verifications')
+        .insert({
+          user_id: userId,
+          phone_number: phoneNumber,
+          is_verified: isVerified,
+          verified_at: isVerified ? new Date().toISOString() : undefined
+        })
+        .select('*')
+        .single()
+
+      if (insertError) {
+        console.error('❌ Error inserting new phone verification:', insertError)
+        throw insertError
+      }
+
+      console.log('✅ New phone verification inserted successfully for user:', userId)
+      return data
+    }
+  } catch (error) {
+    console.error('❌ Error in savePhoneVerification:', error)
     throw error
   }
-
-  return data
 }
 
 // Helper function to get phone verification status
@@ -254,23 +300,69 @@ export async function getPhoneVerification(userId: string) {
 
 // Helper function to save notification settings
 export async function saveNotificationSettings(userId: string, settings: any) {
-  const { data, error } = await supabase
-    .from('notification_settings')
-    .upsert({
-      user_id: userId,
-      push_enabled: settings.pushEnabled,
-      sms_enabled: settings.smsEnabled,
-      calls_enabled: settings.callsEnabled
-    })
-    .select('*')
-    .single()
+  console.log('🔔 saveNotificationSettings called with:', { userId, settings })
+  
+  try {
+    // First, clean up any existing duplicates for this user
+    await cleanupDuplicateNotificationSettings(userId)
+    
+    // Check if notification settings already exist for this user
+    const { data: existingSettings, error: selectError } = await supabase
+      .from('notification_settings')
+      .select('id')
+      .eq('user_id', userId)
+      .single()
 
-  if (error) {
-    console.error('Error saving notification settings:', error)
+    if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('❌ Error checking existing notification settings:', selectError)
+      throw selectError
+    }
+
+    if (existingSettings) {
+      // Update existing settings
+      const { data, error: updateError } = await supabase
+        .from('notification_settings')
+        .update({
+          push_enabled: settings.pushEnabled,
+          sms_enabled: settings.smsEnabled,
+          calls_enabled: settings.callsEnabled
+        })
+        .eq('user_id', userId)
+        .select('*')
+        .single()
+
+      if (updateError) {
+        console.error('❌ Error updating existing notification settings:', updateError)
+        throw updateError
+      }
+
+      console.log('✅ Existing notification settings updated successfully for user:', userId)
+      return data
+    } else {
+      // Insert new settings
+      const { data, error: insertError } = await supabase
+        .from('notification_settings')
+        .insert({
+          user_id: userId,
+          push_enabled: settings.pushEnabled,
+          sms_enabled: settings.smsEnabled,
+          calls_enabled: settings.callsEnabled
+        })
+        .select('*')
+        .single()
+
+      if (insertError) {
+        console.error('❌ Error inserting new notification settings:', insertError)
+        throw insertError
+      }
+
+      console.log('✅ New notification settings inserted successfully for user:', userId)
+      return data
+    }
+  } catch (error) {
+    console.error('❌ Error in saveNotificationSettings:', error)
     throw error
   }
-
-  return data
 }
 
 // Helper function to get notification settings
@@ -361,29 +453,202 @@ export async function updateAlertMetrics(alertId: string, metrics: any) {
   console.log('📊 updateAlertMetrics called with:', { alertId, metrics })
   
   try {
-    const { error } = await supabase
+    // First, clean up any existing duplicates for this alert
+    await cleanupDuplicateAlertMetrics(alertId)
+    
+    // Check if metrics already exist for this alert
+    const { data: existingMetrics, error: selectError } = await supabase
       .from('alert_metrics')
-      .upsert({
-        alert_id: alertId,
-        market_cap_enabled: metrics.marketCapEnabled,
-        price_change_enabled: metrics.priceChangeEnabled,
-        volume_enabled: metrics.volumeEnabled,
-        market_cap_high: metrics.marketCapHigh,
-        market_cap_low: metrics.marketCapLow,
-        price_change_threshold: metrics.priceChangeThreshold,
-        volume_threshold: metrics.volumeThreshold,
-        volume_period: metrics.volumePeriod
-      })
+      .select('id')
+      .eq('alert_id', alertId)
+      .single()
 
-    if (error) {
-      console.error('❌ Error updating alert metrics:', error)
-      throw error
+    if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('❌ Error checking existing metrics:', selectError)
+      throw selectError
     }
 
-    console.log('✅ Alert metrics updated successfully for alert:', alertId)
+    if (existingMetrics) {
+      // Update existing metrics
+      const { error: updateError } = await supabase
+        .from('alert_metrics')
+        .update({
+          market_cap_enabled: metrics.marketCapEnabled,
+          price_change_enabled: metrics.priceChangeEnabled,
+          volume_enabled: metrics.volumeEnabled,
+          market_cap_high: metrics.marketCapHigh,
+          market_cap_low: metrics.marketCapLow,
+          price_change_threshold: metrics.priceChangeThreshold,
+          volume_threshold: metrics.volumeThreshold,
+          volume_period: metrics.volumePeriod
+        })
+        .eq('alert_id', alertId)
+
+      if (updateError) {
+        console.error('❌ Error updating existing alert metrics:', updateError)
+        throw updateError
+      }
+
+      console.log('✅ Existing alert metrics updated successfully for alert:', alertId)
+    } else {
+      // Insert new metrics
+      const { error: insertError } = await supabase
+        .from('alert_metrics')
+        .insert({
+          alert_id: alertId,
+          market_cap_enabled: metrics.marketCapEnabled,
+          price_change_enabled: metrics.priceChangeEnabled,
+          volume_enabled: metrics.volumeEnabled,
+          market_cap_high: metrics.marketCapHigh,
+          market_cap_low: metrics.marketCapLow,
+          price_change_threshold: metrics.priceChangeThreshold,
+          volume_threshold: metrics.volumeThreshold,
+          volume_period: metrics.volumePeriod
+        })
+
+      if (insertError) {
+        console.error('❌ Error inserting new alert metrics:', insertError)
+        throw insertError
+      }
+
+      console.log('✅ New alert metrics inserted successfully for alert:', alertId)
+    }
+
     return true
   } catch (error) {
     console.error('❌ Error in updateAlertMetrics:', error)
+    throw error
+  }
+}
+
+// Helper function to clean up duplicate alert metrics for a specific alert
+export async function cleanupDuplicateAlertMetrics(alertId: string) {
+  console.log('🧹 Cleaning up duplicate alert metrics for alert:', alertId)
+  
+  try {
+    // Get all metrics for this alert
+    const { data: allMetrics, error: selectError } = await supabase
+      .from('alert_metrics')
+      .select('id')
+      .eq('alert_id', alertId)
+      .order('created_at', { ascending: true })
+
+    if (selectError) {
+      console.error('❌ Error selecting metrics for cleanup:', selectError)
+      throw selectError
+    }
+
+    // If there's more than one metric, delete all but the first (oldest)
+    if (allMetrics && allMetrics.length > 1) {
+      const metricsToDelete = allMetrics.slice(1) // Keep first, delete the rest
+      const idsToDelete = metricsToDelete.map(m => m.id)
+      
+      const { error: deleteError } = await supabase
+        .from('alert_metrics')
+        .delete()
+        .in('id', idsToDelete)
+
+      if (deleteError) {
+        console.error('❌ Error deleting duplicate metrics:', deleteError)
+        throw deleteError
+      }
+
+      console.log('✅ Deleted', metricsToDelete.length, 'duplicate metrics for alert:', alertId)
+    } else {
+      console.log('ℹ️ No duplicates found for alert:', alertId)
+    }
+
+    return true
+  } catch (error) {
+    console.error('❌ Error in cleanupDuplicateAlertMetrics:', error)
+    throw error
+  }
+}
+
+// Helper function to clean up duplicate notification settings for a specific user
+export async function cleanupDuplicateNotificationSettings(userId: string) {
+  console.log('🧹 Cleaning up duplicate notification settings for user:', userId)
+  
+  try {
+    // Get all notification settings for this user
+    const { data: allSettings, error: selectError } = await supabase
+      .from('notification_settings')
+      .select('id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+
+    if (selectError) {
+      console.error('❌ Error selecting notification settings for cleanup:', selectError)
+      throw selectError
+    }
+
+    // If there's more than one setting, delete all but the first (oldest)
+    if (allSettings && allSettings.length > 1) {
+      const settingsToDelete = allSettings.slice(1) // Keep first, delete the rest
+      const idsToDelete = settingsToDelete.map(s => s.id)
+      
+      const { error: deleteError } = await supabase
+        .from('notification_settings')
+        .delete()
+        .in('id', idsToDelete)
+
+      if (deleteError) {
+        console.error('❌ Error deleting duplicate notification settings:', deleteError)
+        throw deleteError
+      }
+
+      console.log('✅ Deleted', settingsToDelete.length, 'duplicate notification settings for user:', userId)
+    } else {
+      console.log('ℹ️ No duplicates found for user:', userId)
+    }
+
+    return true
+  } catch (error) {
+    console.error('❌ Error in cleanupDuplicateNotificationSettings:', error)
+    throw error
+  }
+}
+
+// Helper function to clean up duplicate phone verifications for a specific user
+export async function cleanupDuplicatePhoneVerifications(userId: string) {
+  console.log('🧹 Cleaning up duplicate phone verifications for user:', userId)
+  
+  try {
+    // Get all phone verifications for this user
+    const { data: allVerifications, error: selectError } = await supabase
+      .from('phone_verifications')
+      .select('id')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+
+    if (selectError) {
+      console.error('❌ Error selecting phone verifications for cleanup:', selectError)
+      throw selectError
+    }
+
+    // If there's more than one verification, delete all but the first (oldest)
+    if (allVerifications && allVerifications.length > 1) {
+      const verificationsToDelete = allVerifications.slice(1) // Keep first, delete the rest
+      const idsToDelete = verificationsToDelete.map(v => v.id)
+      
+      const { error: deleteError } = await supabase
+        .from('phone_verifications')
+        .delete()
+        .in('id', idsToDelete)
+
+      if (deleteError) {
+        console.error('❌ Error deleting duplicate phone verifications:', deleteError)
+        throw deleteError
+      }
+
+      console.log('✅ Deleted', verificationsToDelete.length, 'duplicate phone verifications for user:', userId)
+    } else {
+      console.log('ℹ️ No duplicates found for user:', userId)
+    }
+
+    return true
+  } catch (error) {
+    console.error('❌ Error in cleanupDuplicatePhoneVerifications:', error)
     throw error
   }
 }

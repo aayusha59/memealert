@@ -33,7 +33,7 @@ import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/contexts/WalletContext"
 import { toast } from "sonner"
 import { DatabaseTest } from "@/components/DatabaseTest"
-import { deleteUserAlert, saveNotificationSettings, updateAlertMetrics, updateAlertNotificationStatus } from "@/lib/supabase"
+import { deleteUserAlert, saveNotificationSettings, updateAlertNotificationStatus, cleanupDuplicateAlertMetrics, cleanupDuplicateNotificationSettings, cleanupDuplicatePhoneVerifications } from "@/lib/supabase"
 
 interface TokenResult {
   address: string
@@ -88,7 +88,8 @@ export default function Dashboard() {
     setNotificationSettings,
     refreshUserData,
     reloadAlerts,
-    updateAlertNotification
+    updateAlertNotification,
+    updateAlertMetrics: updateContextAlertMetrics
   } = useWallet()
   
   const [showWalletModal, setShowWalletModal] = useState(false)
@@ -326,18 +327,15 @@ export default function Dashboard() {
     }
 
     try {
-      // Update metrics in database
-      await updateAlertMetrics(editingAlert.id, editingAlertMetrics);
+      // Update metrics in database and context
+      await updateContextAlertMetrics(editingAlert.id, editingAlertMetrics);
       
-      // Update local state
+      // Update local state to match context
       const updatedAlerts = alerts.map((alert) => 
         alert.id === editingAlert.id ? { ...alert, metrics: editingAlertMetrics } : alert
       );
       
       setAlerts(updatedAlerts);
-      
-      // Refresh context alerts to ensure they're in sync
-      await reloadAlerts();
       
       toast.success("Alert updated successfully");
     } catch (error) {
@@ -363,6 +361,36 @@ export default function Dashboard() {
     }
   }
 
+  const cleanupAllDuplicates = async () => {
+    try {
+      console.log('🧹 Starting cleanup of all duplicate data...')
+      
+      if (userId) {
+        // Clean up duplicate phone verifications for the user
+        await cleanupDuplicatePhoneVerifications(userId)
+        console.log('✅ Phone verification duplicates cleaned up')
+        
+        // Clean up duplicate notification settings for the user
+        await cleanupDuplicateNotificationSettings(userId)
+        console.log('✅ Notification settings duplicates cleaned up')
+      }
+      
+      // Clean up duplicates for each alert
+      for (const alert of alerts) {
+        await cleanupDuplicateAlertMetrics(alert.id)
+      }
+      
+      // Refresh alerts to get clean data
+      await reloadAlerts()
+      
+      toast.success("All duplicates cleaned up successfully")
+      console.log('✅ Cleanup completed')
+    } catch (error) {
+      console.error('❌ Error during cleanup:', error)
+      toast.error("Failed to clean up duplicates")
+    }
+  }
+
   // Sync context values with local state when they change
   useEffect(() => {
     setPhoneNumber(contextPhoneNumber || "")
@@ -374,12 +402,19 @@ export default function Dashboard() {
   }, [contextPhoneNumber, contextIsPhoneVerified, contextVerificationStep, contextPushEnabled, contextSmsEnabled, contextCallsEnabled])
 
   // Sync alerts from context when they change (important for page refresh)
+  // Only sync when not editing and when alerts are actually different
   useEffect(() => {
-    if (walletAlerts && walletAlerts.length > 0) {
-      console.log('🔄 Syncing alerts from context:', walletAlerts.length, 'alerts')
-      setAlerts(walletAlerts)
+    if (walletAlerts && walletAlerts.length > 0 && !editingAlert) {
+      // Check if the alerts are actually different from current local state
+      const currentAlertsString = JSON.stringify(alerts)
+      const contextAlertsString = JSON.stringify(walletAlerts)
+      
+      if (currentAlertsString !== contextAlertsString) {
+        console.log('🔄 Syncing alerts from context:', walletAlerts.length, 'alerts')
+        setAlerts(walletAlerts)
+      }
     }
-  }, [walletAlerts])
+  }, [walletAlerts, editingAlert, alerts])
 
   // Debug logging for state restoration
   useEffect(() => {
@@ -664,6 +699,14 @@ export default function Dashboard() {
               }}
             >
               Sync Alerts from Context
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={cleanupAllDuplicates}
+              disabled={isLoading}
+            >
+              Cleanup Duplicates
             </Button>
           </div>
         </div>
