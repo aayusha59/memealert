@@ -58,13 +58,9 @@ export default function PhoneVerification() {
   }
 
   const formatPhoneNumber = (phone: string) => {
-    // PhoneInput component already returns the number in international format
-    // but we need to make sure it starts with a + for E.164 format
-    if (!phone.startsWith('+')) {
-      return `+${phone}`
-    }
-    
-    return phone
+    // Remove all non-digit characters and ensure E.164 format
+    const digits = phone.replace(/[^0-9]/g, "")
+    return `+${digits}`
   }
 
   const sendVerificationCode = async () => {

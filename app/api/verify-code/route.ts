@@ -18,11 +18,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Phone number is required" }, { status: 400 })
     }
     
-    // Ensure the phone number is in E.164 format (starts with +)
-    if (!phoneNumber.startsWith('+')) {
-      console.error('❌ Phone number is not in E.164 format:', phoneNumber)
-      return NextResponse.json({ 
-        error: "Invalid phone number format. Phone number must start with + sign followed by country code." 
+    // Sanitize phone number and ensure it is in E.164 format
+    const sanitizedPhoneNumber = phoneNumber.replace(/[^\d+]/g, '')
+    if (!/^\+[1-9]\d{1,14}$/.test(sanitizedPhoneNumber)) {
+      console.error('❌ Phone number is not in valid E.164 format:', phoneNumber)
+      return NextResponse.json({
+        error: "Invalid phone number format. Phone number must be digits only and start with a + sign."
       }, { status: 400 })
     }
 
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     console.log('✅ Input validation passed, calling Twilio service to verify code')
     
     // Verify the code using Twilio service
-    const verificationCheck = await verifyCode(phoneNumber, code)
+    const verificationCheck = await verifyCode(sanitizedPhoneNumber, code)
     console.log('📊 Verification check response:', {
       status: verificationCheck.status,
       valid: verificationCheck.valid,
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     if (isApproved) {
       console.log('✅ Code verified successfully, updating phone verification status in database')
       // Update phone verification status in Supabase
-      await savePhoneVerification(userId, phoneNumber, true)
+      await savePhoneVerification(userId, sanitizedPhoneNumber, true)
       console.log('✅ Phone verification successful for user:', userId)
     } else {
       console.log('❌ Phone verification failed for user:', userId, 'Status:', verificationCheck.status)
