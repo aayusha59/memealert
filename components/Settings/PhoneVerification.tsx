@@ -1,308 +1,398 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useWallet } from "@/contexts/WalletContext"
-import { Loader2, Check, X, Phone } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Phone, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import PhoneInput from "react-phone-input-2"
-import "react-phone-input-2/lib/style.css"
-import "@/styles/phone-input.css"
+import { useWallet } from "@/contexts/WalletContext"
 
-export default function PhoneVerification() {
-  const { userId, phoneNumber: contextPhoneNumber, isPhoneVerified, setPhoneVerified } = useWallet()
+// Animation variants
+const modalVariants = {
+  hidden: { 
+    opacity: 0, 
+    scale: 0.95,
+    y: 20
+  },
+  visible: { 
+    opacity: 1, 
+    scale: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.3
+    }
+  },
+  exit: { 
+    opacity: 0, 
+    scale: 0.95,
+    y: 20,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.2
+    }
+  }
+}
+
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: { duration: 0.2, ease: "easeInOut" }
+  },
+  exit: { 
+    opacity: 0,
+    transition: { duration: 0.2, ease: "easeInOut" }
+  }
+}
+
+// Phone verification component for settings
+
+export function PhoneVerification() {
+  const { 
+    walletAddress, 
+    userId, 
+    phoneNumber: contextPhoneNumber, 
+    phoneVerified: contextPhoneVerified, 
+    phoneVerifiedAt: contextPhoneVerifiedAt,
+    refreshPhoneStatus
+  } = useWallet()
   
-  const [phoneNumber, setPhoneNumber] = useState(contextPhoneNumber || "")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [showVerificationModal, setShowVerificationModal] = useState(false)
   const [verificationCode, setVerificationCode] = useState("")
-  const [verificationStep, setVerificationStep] = useState<"phone" | "code" | "verified">(
-    isPhoneVerified ? "verified" : "phone"
-  )
   const [isVerifying, setIsVerifying] = useState(false)
-  const [phoneNumberError, setPhoneNumberError] = useState("")
 
-  // Update local state when context changes
-  useEffect(() => {
-    setPhoneNumber(contextPhoneNumber || "")
-    if (isPhoneVerified) {
-      setVerificationStep("verified")
-    }
-  }, [contextPhoneNumber, isPhoneVerified])
-
-  // Phone number validation and formatting
-  const validatePhoneNumber = (phone: string) => {
-    // The phone input component already validates the phone number
-    // and ensures it's in the correct format with country code
-    if (!phone) {
-      return "Phone number is required"
-    }
-    
-    // Make sure the phone number starts with a +
-    if (!phone.startsWith('+')) {
-      return "Phone number must include country code"
-    }
-    
-    // Remove all non-digit characters except the leading +
-    const digitsWithPlus = phone.replace(/(?!^\+)[^0-9]/g, '')
-    
-    if (digitsWithPlus.length < 8) { // +country_code + number (min 7 digits)
-      return "Phone number is too short"
-    }
-    
-    if (digitsWithPlus.length > 16) { // +country_code + number (max 15 digits)
-      return "Phone number is too long"
-    }
-    
-    return ""
+  // Use context phone status
+  const phoneStatus = {
+    phoneNumber: contextPhoneNumber,
+    phoneVerified: contextPhoneVerified,
+    phoneVerifiedAt: contextPhoneVerifiedAt
   }
 
-  const formatPhoneNumber = (phone: string) => {
-    // PhoneInput component already returns the number in international format
-    // but we need to make sure it starts with a + for E.164 format
-    if (!phone.startsWith('+')) {
-      return `+${phone}`
+  // Sync local phone number with context
+  useEffect(() => {
+    if (contextPhoneNumber) {
+      setPhoneNumber(contextPhoneNumber)
     }
-    
+  }, [contextPhoneNumber])
+
+  const formatPhoneNumber = (phone: string) => {
+    // Simple formatting for display
+    if (phone.startsWith('+1') && phone.length === 12) {
+      const digits = phone.slice(2)
+      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+    }
     return phone
   }
 
+  const validatePhoneNumber = (phone: string) => {
+    // Basic international phone number validation
+    const phoneRegex = /^\+[1-9]\d{1,14}$/
+    return phoneRegex.test(phone)
+  }
+
   const sendVerificationCode = async () => {
-    console.log('🔍 sendVerificationCode called with:', { phoneNumber, userId })
-    
-    if (!phoneNumber) {
-      console.log('❌ No phone number provided')
-      return
-    }
-    
-    if (!userId) {
-      console.log('❌ No userId available')
-      toast.error("Please connect your wallet first")
+    if (!walletAddress) {
+      toast.error("Wallet not connected")
       return
     }
 
-    setIsVerifying(true)
-    console.log('✅ Starting verification code send...')
+    if (!phoneNumber.trim()) {
+      toast.error("Please enter a phone number")
+      return
+    }
+
+    if (!validatePhoneNumber(phoneNumber)) {
+      toast.error("Please enter a valid international phone number (e.g., +1234567890)")
+      return
+    }
+
+    setIsLoading(true)
     
     try {
-      // Format phone number for Twilio (E.164 format)
-      const twilioPhoneNumber = formatPhoneNumber(phoneNumber)
-      console.log('📱 Formatted phone number:', twilioPhoneNumber)
-      
-      console.log('📡 Making API call to /api/send-verification')
-      const response = await fetch("/api/send-verification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: twilioPhoneNumber, userId }),
+      const response = await fetch('/api/send-verification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress,
+          phoneNumber
+        })
       })
-      
-      console.log('📡 API response status:', response.status)
 
-      if (response.ok) {
-        const data = await response.json()
-        console.log('✅ API success:', data)
-        setVerificationStep("code")
-        toast.success("Verification code sent")
-      } else {
-        const errorData = await response.json()
-        console.log('❌ API error:', errorData)
-        toast.error(errorData.error || "Failed to send verification code")
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send verification code')
       }
+
+      toast.success("Verification code sent!")
+      setShowVerificationModal(true)
+      setVerificationCode("")
     } catch (error) {
-      console.log('❌ Fetch error:', error)
-      toast.error("Error sending verification code")
       console.error("Error sending verification code:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to send verification code")
     } finally {
-      console.log('🏁 Setting isVerifying to false')
-      setIsVerifying(false)
+      setIsLoading(false)
     }
   }
 
   const verifyCode = async () => {
-    if (!verificationCode) return
-    
-    if (!userId) {
-      toast.error("Please connect your wallet first")
+    if (!walletAddress) {
+      toast.error("Wallet not connected")
+      return
+    }
+
+    if (verificationCode.length !== 6) {
+      toast.error("Please enter the complete 6-digit code")
       return
     }
 
     setIsVerifying(true)
-    
+
     try {
-      // Format phone number for Twilio (E.164 format)
-      const twilioPhoneNumber = formatPhoneNumber(phoneNumber)
+      console.log('🔍 Verifying code:', verificationCode, 'for wallet:', walletAddress)
       
-      const response = await fetch("/api/verify-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: twilioPhoneNumber, code: verificationCode, userId }),
+      const response = await fetch('/api/verify-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress,
+          verificationCode
+        })
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setVerificationStep("verified")
-          setPhoneVerified(true, phoneNumber)
-          toast.success("Phone number verified successfully!")
-        } else {
-          toast.error("Invalid verification code")
-        }
-      } else {
-        const data = await response.json()
-        toast.error(data.error || "Failed to verify code")
+      const data = await response.json()
+      console.log('📝 Verification response:', data, 'Status:', response.status)
+
+      if (!response.ok) {
+        console.error('❌ Verification failed:', data)
+        throw new Error(data.error || 'Failed to verify code')
       }
+
+      toast.success("Phone number verified successfully!")
+      
+      // Refresh phone status from context
+      await refreshPhoneStatus()
+
+      setShowVerificationModal(false)
+      setVerificationCode("")
     } catch (error) {
-      toast.error("Error verifying code")
       console.error("Error verifying code:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to verify code")
     } finally {
       setIsVerifying(false)
     }
   }
 
-  const changePhoneNumber = () => {
+  const startNewVerification = () => {
     setPhoneNumber("")
-    setVerificationCode("")
-    setVerificationStep("phone")
-    setPhoneNumberError("")
-    setPhoneVerified(false, "")
+    // Note: In a full implementation, you might want to clear the phone number from the database
+    // For now, we just reset the local form state
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Phone className="h-5 w-5 text-primary" />
-        <h3 className="text-lg font-medium">Phone Verification</h3>
-      </div>
-
-      {verificationStep === "phone" && (
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="phone-input" className="text-sm font-medium mb-1 block">
-              Phone Number
-            </Label>
-            <div className={`phone-input-container ${phoneNumberError ? 'error' : ''}`}>
-              <PhoneInput
-                country={"us"}
-                value={phoneNumber.replace(/^\+/, '')}
-                onChange={(value) => {
-                  const formattedValue = `+${value}`
-                  setPhoneNumber(formattedValue)
-                  setPhoneNumberError(validatePhoneNumber(formattedValue))
-                }}
-                inputProps={{
-                  id: "phone-input",
-                  name: "phone",
-                  required: true,
-                }}
-                containerClass="phone-input-container"
-                dropdownClass="phone-dropdown"
-                searchClass="phone-search"
-                enableSearch={true}
-                disableSearchIcon={false}
-                countryCodeEditable={false}
-                specialLabel={""}
-                preferredCountries={["us", "ca", "gb", "au"]}
-              />
-            </div>
-            {phoneNumberError ? (
-              <p className="text-xs text-red-500 mt-1">{phoneNumberError}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1">
-                Select your country code and enter your phone number
-              </p>
-            )}
+    <>
+      <div className="p-6">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-md">
+            <Phone className="size-4" />
           </div>
-          <Button
-            onClick={sendVerificationCode}
-            disabled={isVerifying || !phoneNumber || !!phoneNumberError || (phoneNumber ? phoneNumber.replace(/\D/g, '').length < 10 : true)}
-            className="w-full"
-          >
-            {isVerifying ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Sending Code...
-              </>
-            ) : (
-              "Send Verification Code"
-            )}
-          </Button>
+          <h4 className="text-xl font-semibold">Phone Verification</h4>
         </div>
-      )}
 
-      {verificationStep === "code" && (
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="code-input" className="text-sm font-medium mb-1 block">
-              Verification Code
-            </Label>
-            <Input
-              id="code-input"
-              type="text"
-              placeholder="Enter 6-digit code"
-              value={verificationCode}
-              onChange={(e) => setVerificationCode(e.target.value)}
-              maxLength={6}
-              className="w-full text-center text-lg font-mono"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Enter the 6-digit code sent to {phoneNumber}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={() => {
-                setVerificationStep("phone")
-                setVerificationCode("")
-              }}
-              variant="outline"
-              className="flex-1"
+        {phoneStatus.phoneVerified && phoneStatus.phoneNumber ? (
+          // Already verified
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="size-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <CheckCircle className="size-4 text-green-600 dark:text-green-400" />
+              </div>
+              <Badge variant="default" className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800">
+                Verified
+              </Badge>
+            </div>
+            
+            <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20">
+              <Label className="text-sm font-medium text-muted-foreground mb-2 block">Verified Phone Number</Label>
+              <div className="font-mono text-foreground text-lg">{formatPhoneNumber(phoneStatus.phoneNumber)}</div>
+              {phoneStatus.phoneVerifiedAt && (
+                <div className="text-sm text-muted-foreground mt-2">
+                  Verified on {new Date(phoneStatus.phoneVerifiedAt).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+
+            <Button 
+              variant="outline" 
+              onClick={startNewVerification} 
+              className="w-full rounded-lg bg-background/50 hover:bg-background/80 border-border/40 transition-all duration-200"
             >
-              Back
+              Change Phone Number
             </Button>
-            <Button
-              onClick={verifyCode}
-              disabled={isVerifying || !verificationCode || verificationCode.length !== 6}
-              className="flex-1"
+          </div>
+        ) : (
+          // Not verified yet
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="size-6 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                <AlertCircle className="size-4 text-yellow-600 dark:text-yellow-400" />
+              </div>
+              <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800">
+                Not Verified
+              </Badge>
+            </div>
+
+            <div className="space-y-3">
+              <Label htmlFor="phone" className="text-sm font-medium text-muted-foreground">
+                Phone Number
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+1234567890"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                className="font-mono bg-background/50 border-border/40 rounded-lg h-12 text-base"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter your phone number in international format (e.g., +1 for US)
+              </p>
+            </div>
+
+            <Button 
+              onClick={sendVerificationCode} 
+              disabled={isLoading || !phoneNumber.trim()}
+              className="w-full h-12 rounded-lg text-base font-medium"
             >
-              {isVerifying ? (
+              {isLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Verifying...
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  Sending Code...
                 </>
               ) : (
-                "Verify Code"
+                "Send Verification Code"
               )}
             </Button>
-          </div>
-          <div className="text-center">
-            <Button
-              onClick={sendVerificationCode}
-              disabled={isVerifying}
-              variant="ghost"
-              size="sm"
-              className="text-xs"
-            >
-              Didn't receive code? Resend
-            </Button>
-          </div>
-        </div>
-      )}
 
-      {verificationStep === "verified" && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-green-500">
-            <Check className="h-5 w-5" />
-            <span className="font-medium">Phone number verified: {phoneNumber}</span>
+            <div className="text-sm text-muted-foreground p-4 bg-muted/20 rounded-lg border border-border/20">
+              <p>
+                You'll receive a 6-digit verification code via SMS. 
+                Standard messaging rates may apply.
+              </p>
+            </div>
           </div>
-          <Button
-            onClick={changePhoneNumber}
-            variant="outline"
-            className="w-full"
-          >
-            Change Phone Number
-          </Button>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+
+      {/* Verification Code Modal */}
+      <AnimatePresence>
+        {showVerificationModal && (
+          <Dialog open={true} onOpenChange={setShowVerificationModal}>
+            <motion.div
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              onClick={() => setShowVerificationModal(false)}
+            >
+              <motion.div
+                variants={modalVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <DialogContent className="sm:max-w-md bg-gradient-to-b from-background to-muted/10 border border-border/40 rounded-xl shadow-2xl backdrop-blur-md">
+          <DialogHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="size-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white shadow-lg">
+                <Phone className="size-6" />
+              </div>
+            </div>
+            <DialogTitle className="text-xl font-semibold">Enter Verification Code</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            <div className="text-center p-4 bg-muted/20 rounded-lg border border-border/20">
+              <p className="text-sm text-muted-foreground mb-2">
+                We sent a 6-digit code to:
+              </p>
+              <p className="font-mono font-medium text-lg">
+                {formatPhoneNumber(phoneNumber)}
+              </p>
+            </div>
+
+            <div className="flex justify-center">
+              <InputOTP 
+                maxLength={6} 
+                value={verificationCode} 
+                onChange={setVerificationCode}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} className="size-12 text-lg border-border/40" />
+                  <InputOTPSlot index={1} className="size-12 text-lg border-border/40" />
+                  <InputOTPSlot index={2} className="size-12 text-lg border-border/40" />
+                  <InputOTPSlot index={3} className="size-12 text-lg border-border/40" />
+                  <InputOTPSlot index={4} className="size-12 text-lg border-border/40" />
+                  <InputOTPSlot index={5} className="size-12 text-lg border-border/40" />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+
+            <div className="space-y-3">
+              <Button 
+                onClick={verifyCode} 
+                disabled={isVerifying || verificationCode.length !== 6}
+                className="w-full h-12 rounded-lg text-base font-medium"
+              >
+                {isVerifying ? (
+                  <>
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify Code"
+                )}
+              </Button>
+
+              <Button 
+                variant="outline" 
+                onClick={sendVerificationCode}
+                disabled={isLoading}
+                className="w-full h-12 rounded-lg bg-background/50 hover:bg-background/80 border-border/40 transition-all duration-200"
+              >
+                {isLoading ? "Sending..." : "Resend Code"}
+              </Button>
+            </div>
+
+            <div className="text-center text-xs text-muted-foreground p-3 bg-muted/20 rounded-lg border border-border/20">
+              <p>Code expires in 10 minutes</p>
+            </div>
+          </div>
+        </DialogContent>
+              </motion.div>
+            </motion.div>
+          </Dialog>
+        )}
+      </AnimatePresence>
+    </>
   )
 }
