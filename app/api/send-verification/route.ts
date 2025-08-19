@@ -1,65 +1,76 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { savePhoneVerification } from "@/lib/supabase"
-import { sendVerificationCode } from "@/services/twilioService"
+import { NextRequest, NextResponse } from 'next/server'
+import { sendVerificationCode, generateVerificationCode, storeVerificationCode } from '@/services/twilioService'
+import { getUserByWalletAddress } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
-    const { phoneNumber, userId } = await request.json()
-    
-    console.log('📡 /api/send-verification received:', { phoneNumber, userId })
+    const { walletAddress, phoneNumber } = await request.json()
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 })
+    // Validate input
+    if (!walletAddress || !phoneNumber) {
+      return NextResponse.json(
+        { error: 'Wallet address and phone number are required' },
+        { status: 400 }
+      )
     }
 
-    if (!phoneNumber) {
-      return NextResponse.json({ error: "Phone number is required" }, { status: 400 })
-    }
-    
-    // Ensure the phone number is in E.164 format (starts with +)
-    // Sanitize phone number and ensure it is in E.164 format
-    const sanitizedPhoneNumber = phoneNumber.replace(/[^\d+]/g, '')
-    if (!/^\+[1-9]\d{1,14}$/.test(sanitizedPhoneNumber)) {
-      console.error('❌ Phone number is not in valid E.164 format:', phoneNumber)
-      return NextResponse.json({
-        error: "Invalid phone number format. Phone number must be digits only and start with a + sign."
-      }, { status: 400 })
+    // Validate phone number format (basic validation)
+    const phoneRegex = /^\+[1-9]\d{1,14}$/
+    if (!phoneRegex.test(phoneNumber)) {
+      return NextResponse.json(
+        { error: 'Invalid phone number format. Please use international format (e.g., +1234567890)' },
+        { status: 400 }
+      )
     }
 
-    console.log('🔑 Twilio environment check:', {
-      accountSid: !!process.env.TWILIO_ACCOUNT_SID,
-      authToken: !!process.env.TWILIO_AUTH_TOKEN,
-      verifyServiceSid: !!process.env.TWILIO_VERIFY_SERVICE_SID
+    // Get user by wallet address
+    const user = await getUserByWalletAddress(walletAddress)
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Generate verification code
+    const verificationCode = generateVerificationCode()
+
+    // Store verification code
+    storeVerificationCode(user.id, phoneNumber, verificationCode)
+
+    // Send SMS
+    await sendVerificationCode(phoneNumber, verificationCode)
+
+    console.log('✅ Verification code sent to:', phoneNumber, 'for user:', user.id)
+
+    return NextResponse.json({
+      success: true,
+      message: 'Verification code sent successfully'
     })
 
-    // Generate a verification code using Twilio service
-    const verification = await sendVerificationCode(sanitizedPhoneNumber)
-
-    // Save the verification attempt to Supabase
-    await savePhoneVerification(userId, sanitizedPhoneNumber)
-
-    console.log('✅ Twilio verification created successfully:', verification.status)
-    return NextResponse.json({ success: true, status: verification.status })
   } catch (error) {
-    console.error("❌ Twilio verification error:", error)
+    console.error('❌ Error sending verification code:', error)
     
-    // Check if it's a Twilio error
-    if (error && typeof error === 'object' && 'code' in error) {
-      const twilioError = error as any
-      console.error('🔍 Twilio error details:', {
-        code: twilioError.code,
-        message: twilioError.message,
-        moreInfo: twilioError.moreInfo
-      })
+    // Handle Twilio-specific errors
+    if (error instanceof Error) {
+      if (error.message.includes('SMS service not configured')) {
+        return NextResponse.json(
+          { error: 'SMS service is not configured. Please contact support.' },
+          { status: 503 }
+        )
+      }
       
-      if (twilioError.code === 60200) {
-        // Use a generic message since phoneNumber might not be in scope here
-        return NextResponse.json({ 
-          error: "Invalid phone number format. Please use E.164 format (e.g., +15551234567)" 
-        }, { status: 400 })
+      if (error.message.includes('phone number')) {
+        return NextResponse.json(
+          { error: 'Invalid phone number. Please check the format and try again.' },
+          { status: 400 }
+        )
       }
     }
-    
-    return NextResponse.json({ error: "Failed to send verification" }, { status: 500 })
+
+    return NextResponse.json(
+      { error: 'Failed to send verification code. Please try again.' },
+      { status: 500 }
+    )
   }
 }

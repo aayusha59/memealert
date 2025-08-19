@@ -6,7 +6,7 @@ import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui'
 import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets'
 import { clusterApiUrl } from '@solana/web3.js'
-import { createUserIfNotExists, getUserByWalletAddress, getUserAlerts, saveUserAlerts, getPhoneVerification, getNotificationSettings } from '@/lib/supabase'
+import { createUserIfNotExists, getUserByWalletAddress, getUserAlerts, saveUserAlerts, getNotificationSettings, getUserPhoneStatus } from '@/lib/supabase'
 import { WalletStyles } from '@/components/WalletStyles'
 import { ClientOnly } from '@/components/ClientOnly'
 
@@ -16,20 +16,22 @@ interface WalletContextType {
   isWalletConnected: boolean
   isLoading: boolean
   alerts: any[]
-  phoneNumber: string
-  isPhoneVerified: boolean
-  verificationStep: 'phone' | 'code' | 'verified'
+
   pushEnabled: boolean
   smsEnabled: boolean
   callsEnabled: boolean
+  phoneNumber: string | null
+  phoneVerified: boolean
+  phoneVerifiedAt: string | null
   loadUserData: () => Promise<void>
   saveAlerts: (alerts: any[]) => Promise<void>
-  setPhoneVerified: (verified: boolean, phoneNumber: string) => void
+
   setNotificationSettings: (settings: {
     pushEnabled: boolean
     smsEnabled: boolean
     callsEnabled: boolean
   }) => void
+  refreshPhoneStatus: () => Promise<void>
   handleDisconnect: () => void
   checkConnectionStatus: () => Promise<void>
   refreshUserData: () => Promise<void>
@@ -48,12 +50,13 @@ function WalletContextInner({ children }: { children: ReactNode }) {
   const [isWalletConnected, setIsWalletConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [alerts, setAlerts] = useState<any[]>([])
-  const [phoneNumber, setPhoneNumber] = useState('')
-  const [isPhoneVerified, setIsPhoneVerified] = useState(false)
-  const [verificationStep, setVerificationStep] = useState<'phone' | 'code' | 'verified'>('phone')
+
   const [pushEnabled, setPushEnabled] = useState(true)
   const [smsEnabled, setSmsEnabled] = useState(false)
   const [callsEnabled, setCallsEnabled] = useState(false)
+  const [phoneNumber, setPhoneNumber] = useState<string | null>(null)
+  const [phoneVerified, setPhoneVerified] = useState(false)
+  const [phoneVerifiedAt, setPhoneVerifiedAt] = useState<string | null>(null)
 
   // Check for saved wallet on mount and handle auto-reconnection
   useEffect(() => {
@@ -77,17 +80,18 @@ function WalletContextInner({ children }: { children: ReactNode }) {
             
             // Load other user data
             try {
-              const phoneVerification = await getPhoneVerification(user.id)
-              if (phoneVerification) {
-                setPhoneNumber(phoneVerification.phone_number)
-                setIsPhoneVerified(phoneVerification.is_verified)
-                setVerificationStep(phoneVerification.is_verified ? 'verified' : 'phone')
-              }
-              
               const notificationSettings = await getNotificationSettings(user.id)
               setPushEnabled(notificationSettings.pushEnabled)
               setSmsEnabled(notificationSettings.smsEnabled)
               setCallsEnabled(notificationSettings.callsEnabled)
+
+              // Load phone verification status
+              const phoneStatus = await getUserPhoneStatus(user.id)
+              if (phoneStatus) {
+                setPhoneNumber(phoneStatus.phoneNumber || null)
+                setPhoneVerified(phoneStatus.phoneVerified || false)
+                setPhoneVerifiedAt(phoneStatus.phoneVerifiedAt || null)
+              }
             } catch (error) {
               console.error("Error loading additional user data:", error)
             }
@@ -118,23 +122,39 @@ function WalletContextInner({ children }: { children: ReactNode }) {
       const userAlerts = await getUserAlerts(userId)
       setAlerts(userAlerts)
       
-      // Load phone verification status
-      const phoneVerification = await getPhoneVerification(userId)
-      if (phoneVerification) {
-        setPhoneNumber(phoneVerification.phone_number)
-        setIsPhoneVerified(phoneVerification.is_verified)
-        setVerificationStep(phoneVerification.is_verified ? 'verified' : 'phone')
-      }
-      
       // Load notification settings
       const notificationSettings = await getNotificationSettings(userId)
       setPushEnabled(notificationSettings.pushEnabled)
       setSmsEnabled(notificationSettings.smsEnabled)
       setCallsEnabled(notificationSettings.callsEnabled)
+
+      // Load phone verification status
+      const phoneStatus = await getUserPhoneStatus(userId)
+      if (phoneStatus) {
+        setPhoneNumber(phoneStatus.phoneNumber || null)
+        setPhoneVerified(phoneStatus.phoneVerified || false)
+        setPhoneVerifiedAt(phoneStatus.phoneVerifiedAt || null)
+      }
     } catch (error) {
       console.error("Error loading user data:", error)
     } finally {
       setIsLoading(false)
+    }
+  }, [userId])
+
+  // Refresh phone status specifically
+  const refreshPhoneStatus = useCallback(async () => {
+    if (!userId) return
+    
+    try {
+      const phoneStatus = await getUserPhoneStatus(userId)
+      if (phoneStatus) {
+        setPhoneNumber(phoneStatus.phoneNumber || null)
+        setPhoneVerified(phoneStatus.phoneVerified || false)
+        setPhoneVerifiedAt(phoneStatus.phoneVerifiedAt || null)
+      }
+    } catch (error) {
+      console.error("Error refreshing phone status:", error)
     }
   }, [userId])
 
@@ -163,12 +183,13 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     setUserId(null)
     setIsWalletConnected(false)
     setAlerts([])
-    setPhoneNumber('')
-    setIsPhoneVerified(false)
-    setVerificationStep('phone')
+
     setPushEnabled(true)
     setSmsEnabled(false)
     setCallsEnabled(false)
+    setPhoneNumber(null)
+    setPhoneVerified(false)
+    setPhoneVerifiedAt(null)
   }, [])
 
   // Simplified wallet connection handling
@@ -328,11 +349,7 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     }
   }, [userId])
 
-  const setPhoneVerified = useCallback((verified: boolean, number: string) => {
-    setIsPhoneVerified(verified)
-    setPhoneNumber(number)
-    setVerificationStep(verified ? 'verified' : 'phone')
-  }, [])
+
 
   const setNotificationSettings = useCallback((settings: {
     pushEnabled: boolean
@@ -351,16 +368,18 @@ function WalletContextInner({ children }: { children: ReactNode }) {
       isWalletConnected,
       isLoading: isActuallyLoading,
       alerts,
-      phoneNumber,
-      isPhoneVerified,
-      verificationStep,
+
       pushEnabled,
       smsEnabled,
       callsEnabled,
+      phoneNumber,
+      phoneVerified,
+      phoneVerifiedAt,
       loadUserData,
       saveAlerts,
-      setPhoneVerified,
+
       setNotificationSettings,
+      refreshPhoneStatus,
       handleDisconnect,
       checkConnectionStatus,
       refreshUserData,

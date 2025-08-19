@@ -86,11 +86,7 @@ export default function Home() {
         "Connect your Solana wallet to securely store alerts on-chain and verify ownership without passwords.",
       icon: <Zap className="size-5" />,
     },
-    {
-      title: "Phone Verification",
-      description: "Verify your phone number to enable SMS and phone call alerts that keep you connected 24/7.",
-      icon: <BarChart className="size-5" />,
-    },
+
     {
       title: "Customizable Alerts",
       description: "Set thresholds for marketcap, volume, and % gain — toggle metrics on or off to fit your strategy.",
