@@ -38,6 +38,7 @@ interface WalletContextType {
   reloadAlerts: () => Promise<void>
   updateAlertNotification: (alertId: string, notificationsEnabled: boolean) => Promise<void>
   updateAlertMetrics: (alertId: string, metrics: any) => Promise<void>
+  updateAlertChannels: (alertId: string, channels: any) => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined)
@@ -332,6 +333,34 @@ function WalletContextInner({ children }: { children: ReactNode }) {
     }
   }, [userId])
 
+  // Update specific alert notification channels in context
+  const updateAlertChannels = useCallback(async (alertId: string, channels: any) => {
+    if (!userId) {
+      console.error('❌ Cannot update alert channels: no userId')
+      return
+    }
+
+    try {
+      // Update in database
+      const { updateAlertNotificationChannels } = await import('@/lib/supabase')
+      await updateAlertNotificationChannels(alertId, channels)
+      
+      // Update local state
+      setAlerts(prevAlerts => 
+        prevAlerts.map(alert => 
+          alert.id === alertId 
+            ? { ...alert, notificationChannels: channels } 
+            : alert
+        )
+      )
+      
+      console.log('✅ Alert notification channels updated in context:', alertId, channels)
+    } catch (error) {
+      console.error("Error updating alert channels in context:", error)
+      throw error
+    }
+  }, [userId])
+
   const saveAlerts = useCallback(async (newAlerts: any[]) => {
     if (!userId) {
       console.error('❌ Cannot save alerts: no userId', { userId, newAlerts })
@@ -385,7 +414,8 @@ function WalletContextInner({ children }: { children: ReactNode }) {
       refreshUserData,
       reloadAlerts,
       updateAlertNotification,
-      updateAlertMetrics
+      updateAlertMetrics,
+      updateAlertChannels
     }}>
       {children}
     </WalletContext.Provider>

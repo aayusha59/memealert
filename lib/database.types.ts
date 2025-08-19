@@ -53,6 +53,9 @@ export interface Database {
           volume_24h?: number
           price?: number
           notifications_enabled: boolean
+          push_enabled?: boolean
+          sms_enabled?: boolean
+          calls_enabled?: boolean
           created_at: string
           updated_at: string
         }
@@ -68,6 +71,9 @@ export interface Database {
           volume_24h?: number
           price?: number
           notifications_enabled?: boolean
+          push_enabled?: boolean
+          sms_enabled?: boolean
+          calls_enabled?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -83,6 +89,9 @@ export interface Database {
           volume_24h?: number
           price?: number
           notifications_enabled?: boolean
+          push_enabled?: boolean
+          sms_enabled?: boolean
+          calls_enabled?: boolean
           created_at?: string
           updated_at?: string
         }

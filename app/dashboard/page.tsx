@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   ArrowLeft,
   Search,
@@ -20,7 +21,8 @@ import {
   Settings,
   X,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Home
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -59,6 +61,11 @@ interface Alert {
   volume24h: number
   price: number
   notificationsEnabled: boolean
+  notificationChannels?: {
+    pushEnabled: boolean
+    smsEnabled: boolean
+    callsEnabled: boolean
+  }
   metrics?: {
     marketCapEnabled: boolean
     priceChangeEnabled: boolean
@@ -72,6 +79,106 @@ interface Alert {
 }
 
 type AlertMetrics = NonNullable<Alert['metrics']>
+
+// Animation variants
+const modalVariants = {
+  hidden: { 
+    opacity: 0, 
+    scale: 0.95,
+    y: 20
+  },
+  visible: { 
+    opacity: 1, 
+    scale: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.3
+    }
+  },
+  exit: { 
+    opacity: 0, 
+    scale: 0.95,
+    y: 20,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.2
+    }
+  }
+}
+
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: { duration: 0.2, ease: "easeInOut" }
+  },
+  exit: { 
+    opacity: 0,
+    transition: { duration: 0.2, ease: "easeInOut" }
+  }
+}
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+}
+
+const dashboardCardVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 30,
+    scale: 0.95
+  },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.5
+    }
+  }
+}
+
+const alertItemVariants = {
+  hidden: { 
+    opacity: 0, 
+    x: -20,
+    scale: 0.95
+  },
+  visible: { 
+    opacity: 1, 
+    x: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.4
+    }
+  },
+  exit: {
+    opacity: 0,
+    x: 20,
+    scale: 0.8,
+    transition: {
+      type: "spring" as const,
+      stiffness: 400,
+      damping: 30,
+      duration: 0.3
+    }
+  }
+}
 
 export default function Dashboard() {
   const { 
@@ -92,7 +199,8 @@ export default function Dashboard() {
     refreshUserData,
     reloadAlerts,
     updateAlertNotification,
-    updateAlertMetrics: updateContextAlertMetrics
+    updateAlertMetrics: updateContextAlertMetrics,
+    updateAlertChannels: updateContextAlertChannels
   } = useWallet()
   
 
@@ -115,6 +223,11 @@ export default function Dashboard() {
   const [returnToMetrics, setReturnToMetrics] = useState(false)
   const [editingAlert, setEditingAlert] = useState<Alert | null>(null)
   const [editingAlertMetrics, setEditingAlertMetrics] = useState<AlertMetrics | null>(null)
+  const [editingAlertChannels, setEditingAlertChannels] = useState<{
+    pushEnabled: boolean
+    smsEnabled: boolean
+    callsEnabled: boolean
+  } | null>(null)
   const [marketCapHigh, setMarketCapHigh] = useState([1000000])
   const [marketCapLow, setMarketCapLow] = useState([500000])
   const [priceChange, setPriceChange] = useState([20])
@@ -130,14 +243,15 @@ export default function Dashboard() {
     contextCallsEnabled
   });
 
-  // Push is always enabled by default, SMS/Calls are off by default
-  const [pushEnabled, setPushEnabled] = useState(true)
-  const [smsEnabled, setSmsEnabled] = useState(false)
-  const [callsEnabled, setCallsEnabled] = useState(false)
+  // Use context values for notification settings to ensure visual sync
+  const pushEnabled = contextPushEnabled
+  const smsEnabled = contextSmsEnabled
+  const callsEnabled = contextCallsEnabled
 
   const [showSettings, setShowSettings] = useState(false)
   const [showVerificationPrompt, setShowVerificationPrompt] = useState(false)
   const [pendingNotificationType, setPendingNotificationType] = useState<'sms' | 'calls' | null>(null)
+  const [isAddingAlert, setIsAddingAlert] = useState(false)
 
   const searchTokens = async (query: string) => {
     if (!query.trim()) {
@@ -211,6 +325,8 @@ export default function Dashboard() {
       return;
     }
 
+    setIsAddingAlert(true);
+
     const newAlert = {
       id: Date.now().toString(),
       ticker: selectedToken.symbol,
@@ -222,6 +338,11 @@ export default function Dashboard() {
       volume24h: selectedToken.volume24h,
       price: selectedToken.price,
       notificationsEnabled: true,
+      notificationChannels: {
+        pushEnabled: true,
+        smsEnabled: false,
+        callsEnabled: false,
+      },
       metrics: {
         marketCapEnabled: marketCapEnabled,
         priceChangeEnabled: priceChangeEnabled,
@@ -244,9 +365,15 @@ export default function Dashboard() {
     } catch (error) {
       toast.error("Failed to save alert");
       console.error("Error saving alert:", error);
+      setIsAddingAlert(false);
     }
     
     setSelectedToken(null); // Clear selection after creating alert
+    
+    // Clear the adding flag after a delay to allow animation to complete
+    setTimeout(() => {
+      setIsAddingAlert(false);
+    }, 500);
   }
 
   const copyToClipboard = (text: string) => {
@@ -327,10 +454,15 @@ export default function Dashboard() {
       volumeThreshold: 100000,
       volumePeriod: "24 hours"
     })
+    setEditingAlertChannels(alert.notificationChannels || {
+      pushEnabled: true,
+      smsEnabled: false,
+      callsEnabled: false,
+    })
   }
 
   const saveAlertChanges = async () => {
-    if (!editingAlert || !editingAlertMetrics) {
+    if (!editingAlert || !editingAlertMetrics || !editingAlertChannels) {
       toast.error("No alert to update");
       return;
     }
@@ -339,12 +471,8 @@ export default function Dashboard() {
       // Update metrics in database and context
       await updateContextAlertMetrics(editingAlert.id, editingAlertMetrics);
       
-      // Update local state to match context
-      const updatedAlerts = alerts.map((alert) => 
-        alert.id === editingAlert.id ? { ...alert, metrics: editingAlertMetrics } : alert
-      );
-      
-      setAlerts(updatedAlerts);
+      // Update notification channels in database and context
+      await updateContextAlertChannels(editingAlert.id, editingAlertChannels);
       
       toast.success("Alert updated successfully");
     } catch (error) {
@@ -354,6 +482,7 @@ export default function Dashboard() {
     
     setEditingAlert(null);
     setEditingAlertMetrics(null);
+    setEditingAlertChannels(null);
     
     if (returnToMetrics) {
       setViewingMetrics(true);
@@ -364,10 +493,28 @@ export default function Dashboard() {
   const cancelEdit = () => {
     setEditingAlert(null)
     setEditingAlertMetrics(null)
+    setEditingAlertChannels(null)
     if (returnToMetrics) {
       setViewingMetrics(true)
       setReturnToMetrics(false)
     }
+  }
+
+  const handleAlertChannelChange = (channel: 'push' | 'sms' | 'calls', enabled: boolean) => {
+    if (!editingAlertChannels) return;
+    
+    // Check if trying to enable SMS or Calls without phone verification
+    if ((channel === 'sms' || channel === 'calls') && enabled && !phoneVerified) {
+      toast.error(`Phone verification required to enable ${channel.toUpperCase()} notifications for this alert`);
+      return;
+    }
+
+    const updatedChannels = {
+      ...editingAlertChannels,
+      [`${channel}Enabled`]: enabled
+    };
+    
+    setEditingAlertChannels(updatedChannels);
   }
 
   const cleanupAllDuplicates = async () => {
@@ -398,20 +545,14 @@ export default function Dashboard() {
     }
   }
 
-  // Sync context values with local state when they change
-  // Push is always enabled, SMS/Calls only enabled if verified and enabled in context
-  useEffect(() => {
-    setPushEnabled(true) // Always keep push enabled
-    setSmsEnabled(phoneVerified ? contextSmsEnabled : false)
-    setCallsEnabled(phoneVerified ? contextCallsEnabled : false)
-  }, [contextPushEnabled, contextSmsEnabled, contextCallsEnabled, phoneVerified])
+
 
 
 
   // Sync alerts from context when they change (important for page refresh)
-  // Only sync when not editing and when alerts are actually different
+  // Only sync when not editing and not adding an alert and when alerts are actually different
   useEffect(() => {
-    if (walletAlerts && walletAlerts.length > 0 && !editingAlert) {
+    if (walletAlerts && walletAlerts.length > 0 && !editingAlert && !isAddingAlert) {
       // Check if the alerts are actually different from current local state
       const currentAlertsString = JSON.stringify(alerts)
       const contextAlertsString = JSON.stringify(walletAlerts)
@@ -421,7 +562,7 @@ export default function Dashboard() {
         setAlerts(walletAlerts)
       }
     }
-  }, [walletAlerts, editingAlert, alerts])
+  }, [walletAlerts, editingAlert, isAddingAlert])
 
   // Debug logging for state restoration
   useEffect(() => {
@@ -472,15 +613,12 @@ export default function Dashboard() {
       
       switch (setting) {
         case 'push':
-          setPushEnabled(enabled);
           newSettings = { pushEnabled: enabled, smsEnabled, callsEnabled };
           break;
         case 'sms':
-          setSmsEnabled(enabled);
           newSettings = { pushEnabled, smsEnabled: enabled, callsEnabled };
           break;
         case 'calls':
-          setCallsEnabled(enabled);
           newSettings = { pushEnabled, smsEnabled, callsEnabled: enabled };
           break;
       }
@@ -495,19 +633,6 @@ export default function Dashboard() {
     } catch (error) {
       toast.error(`Failed to update ${setting} notifications`);
       console.error(`Error updating ${setting} notifications:`, error);
-      
-      // Revert local state on error
-      switch (setting) {
-        case 'push':
-          setPushEnabled(!enabled);
-          break;
-        case 'sms':
-          setSmsEnabled(!enabled);
-          break;
-        case 'calls':
-          setCallsEnabled(!enabled);
-          break;
-      }
     }
   }
 
@@ -528,40 +653,54 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-lg transition-all duration-300">
-        <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => (window.location.href = "/")} className="flex items-center gap-2">
-              <ArrowLeft className="size-4" />
-              Back to Home
-            </Button>
-            <div className="flex items-center gap-2">
-              <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground font-bold">
-                M
-              </div>
-              <h1 className="text-xl font-bold">Memealert Dashboard</h1>
+      <header className="sticky top-0 z-50 w-full backdrop-blur-md transition-all duration-300 bg-background/95 border-b border-border/40 shadow-lg">
+        <div className="container flex h-16 items-center justify-center relative">
+          {/* Left Section - Logo and Title */}
+          <div className="absolute left-0 flex items-center gap-2">
+            <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground font-bold shadow-lg">
+              M
             </div>
+            <h1 className="text-xl font-bold">Memealert Dashboard</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => {
-                setShowSettings(true);
-              }} className="flex items-center gap-2">
+          
+          {/* Centered Navigation Pills */}
+          <nav className="hidden md:flex items-center gap-2 bg-muted/30 backdrop-blur-sm rounded-full px-4 py-2 border border-border/40">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => (window.location.href = "/")}
+              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
+            >
+              <Home className="size-4" />
+              Home
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
+            >
               <Settings className="size-4" />
               Settings
             </Button>
             <Button 
-              variant="outline" 
+              variant="ghost" 
+              size="sm"
               onClick={() => refreshUserData()} 
-              className="flex items-center gap-2"
               disabled={isLoading}
+              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
             >
               <RefreshCw className="size-4" />
               Refresh
             </Button>
+          </nav>
+          
+          {/* Right Section - Wallet Connection */}
+          <div className="absolute right-0 flex items-center gap-2">
             {isWalletConnected ? (
-              <Button variant="outline" className="flex items-center gap-2">
+              <Button variant="outline" className="flex items-center gap-2 rounded-full bg-muted/30 backdrop-blur-sm border-border/40 hover:bg-background/50 transition-all duration-200">
                 <Wallet className="size-4" />
-                {walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : 'Connected'}
+                {walletAddress ? `${walletAddress!.substring(0, 4)}...${walletAddress!.substring(Math.max(0, walletAddress!.length - 4))}` : 'Connected'}
               </Button>
             ) : (
               <div data-wallet-button className="flex justify-center">
@@ -603,7 +742,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p><strong>User ID:</strong> {userId || 'None'}</p>
-                    <p><strong>Wallet Address:</strong> {walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : 'None'}</p>
+                    <p><strong>Wallet Address:</strong> {walletAddress ? `${walletAddress!.substring(0, 4)}...${walletAddress!.substring(Math.max(0, walletAddress!.length - 4))}` : 'None'}</p>
                     <p><strong>Has LocalStorage:</strong> {typeof window !== 'undefined' && localStorage.getItem("connectedWallet") ? 'Yes' : 'No'}</p>
                   </div>
                 </div>
@@ -669,11 +808,19 @@ export default function Dashboard() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+              <motion.div 
+                className="grid grid-cols-1 lg:grid-cols-5 gap-8"
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+              >
                 {/* Left Column - Alert Configuration */}
                 <div className="lg:col-span-3 space-y-8">
             {/* Search Token Section */}
-            <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl">Search Solana Token</CardTitle>
               </CardHeader>
@@ -741,9 +888,13 @@ export default function Dashboard() {
                 )}
               </CardContent>
             </Card>
+            </motion.div>
 
             {/* Notification Channels */}
-            <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl flex items-center gap-2">
                   <Bell className="size-5" />
@@ -793,9 +944,13 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
+            </motion.div>
 
             {/* Market Cap Alerts */}
-            <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">Market Cap Alerts</CardTitle>
@@ -836,9 +991,13 @@ export default function Dashboard() {
                 </CardContent>
               )}
             </Card>
+            </motion.div>
 
             {/* Price Change Alerts */}
-            <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">Price Change Alerts</CardTitle>
@@ -864,9 +1023,13 @@ export default function Dashboard() {
                 </CardContent>
               )}
             </Card>
+            </motion.div>
 
             {/* Volume Alerts */}
-            <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">Volume Alerts</CardTitle>
@@ -909,11 +1072,14 @@ export default function Dashboard() {
                 </CardContent>
               )}
             </Card>
+            </motion.div>
           </div>
 
           {/* Right Column - Alerts */}
           <div className="lg:col-span-2">
-            <div>
+            <motion.div
+              variants={dashboardCardVariants}
+            >
               <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -935,11 +1101,33 @@ export default function Dashboard() {
                       <p className="text-sm">Create your first alert to get started with memealert notifications.</p>
                     </div>
                   ) : (
-                    alerts.map((alert) => (
-                      <div
-                        key={alert.id}
-                        className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/30 transition-all hover:shadow-md backdrop-blur"
-                      >
+                    <div className="space-y-3">
+                      <AnimatePresence mode="popLayout">
+                        {alerts.map((alert, index) => {
+                          // Check if this is a newly added alert (less than 1 second old)
+                          const isNewAlert = Date.now() - parseInt(alert.id) < 1000;
+                          
+                          return (
+                            <motion.div
+                              key={alert.id}
+                              layoutId={alert.id}
+                              initial={isNewAlert ? { opacity: 0, x: -20, scale: 0.95 } : false}
+                              animate={{ opacity: 1, x: 0, scale: 1 }}
+                              exit={{ 
+                                opacity: 0, 
+                                x: 20, 
+                                scale: 0.8,
+                                transition: { duration: 0.3, ease: "easeInOut" }
+                              }}
+                              transition={{
+                                type: "spring",
+                                stiffness: 300,
+                                damping: 25,
+                                duration: 0.4
+                              }}
+                              layout
+                              className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-muted/20 backdrop-blur transition-colors duration-200 hover:bg-muted/30"
+                            >
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           {/* Status Badge */}
                           <div className={`px-2 py-1 rounded text-xs flex items-center gap-1 ${
@@ -1013,71 +1201,129 @@ export default function Dashboard() {
                             />
                           </div>
                         </div>
-                      </div>
-                    ))
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
                   )}
                 </CardContent>
               </Card>
-            </div>
+            </motion.div>
           </div>
-        </div>
+        </motion.div>
         )}
 
 
 
 
 
+        <AnimatePresence>
         {showSettings && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-background border rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold">Settings</h3>
-                <Button variant="ghost" size="sm" onClick={() => setShowSettings(false)}>
+          <motion.div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+            <motion.div 
+              className="bg-gradient-to-b from-background to-muted/10 border border-border/40 rounded-xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl backdrop-blur-md"
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground shadow-lg">
+                    <Settings className="size-5" />
+                  </div>
+                  <h3 className="text-2xl font-bold">Settings</h3>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowSettings(false)}
+                  className="rounded-full size-10 hover:bg-muted/50 transition-all duration-200 hover:scale-105"
+                >
                   <X className="size-4" />
                 </Button>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {/* Phone Verification Section */}
-                <div>
-                  <h4 className="text-base font-semibold mb-4">Phone Verification</h4>
+                <div className="rounded-xl border border-border/40 bg-gradient-to-br from-background to-muted/20 backdrop-blur-sm shadow-lg overflow-hidden">
                   <PhoneVerification />
-                  <div className="mt-3 p-3 bg-muted/30 rounded-lg">
-                    <p className="text-sm text-muted-foreground">
-                      <strong>Why verify your phone?</strong> Phone verification enables SMS alerts and voice call notifications for your token alerts. 
-                      You'll receive real-time notifications even when you're away from your computer.
-                    </p>
+                  
+                  <div className="p-6 pt-0">
+                    <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20">
+                      <div className="flex items-start gap-3">
+                        <div className="size-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Bell className="size-3 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium mb-1">Why verify your phone?</p>
+                          <p className="text-sm text-muted-foreground">
+                            Phone verification enables SMS alerts and voice call notifications for your token alerts. 
+                            You'll receive real-time notifications even when you're away from your computer.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Wallet Info Section */}
-                <div className="p-4 rounded-lg border">
-                  <h4 className="font-medium mb-2">Connected Wallet</h4>
-                  <div className="text-sm text-muted-foreground">
+                <div className="p-6 rounded-xl border border-border/40 bg-gradient-to-br from-background to-muted/20 backdrop-blur-sm shadow-lg">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="size-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white shadow-md">
+                      <Wallet className="size-4" />
+                    </div>
+                    <h4 className="text-xl font-semibold">Connected Wallet</h4>
+                  </div>
+                  
+                  <div className="space-y-4">
                     {walletAddress ? (
-                      <div className="space-y-2">
-                        <div className="font-mono bg-muted p-2 rounded text-xs break-all">
-                          {walletAddress}
+                      <>
+                        <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20">
+                          <Label className="text-sm font-medium text-muted-foreground mb-2 block">Wallet Address</Label>
+                          <div className="font-mono bg-background/50 p-3 rounded-md text-sm break-all border border-border/20">
+                            {walletAddress}
+                          </div>
                         </div>
-                        <div className="text-xs">
-                          User ID: {userId || 'Loading...'}
+                        <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20">
+                          <Label className="text-sm font-medium text-muted-foreground mb-2 block">User ID</Label>
+                          <div className="font-mono text-sm text-foreground">
+                            {userId || 'Loading...'}
+                          </div>
                         </div>
-                      </div>
+                      </>
                     ) : (
-                      "No wallet connected"
+                      <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20 text-center">
+                        <p className="text-muted-foreground">No wallet connected</p>
+                      </div>
                     )}
                   </div>
                 </div>
-
-
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
+        <AnimatePresence>
         {editingAlert && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-border/40 bg-gradient-to-b from-background to-muted/10 shadow-2xl backdrop-blur">
+          <motion.div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+                          <motion.div variants={modalVariants} initial="hidden" animate="visible" exit="exit">
+              <Card className="w-full max-w-6xl max-h-[90vh] overflow-y-auto border border-border/40 bg-gradient-to-b from-background to-muted/10 shadow-2xl backdrop-blur">
               <CardHeader>
                 <CardTitle>Edit Alert: {editingAlert.ticker}</CardTitle>
               </CardHeader>
@@ -1085,13 +1331,16 @@ export default function Dashboard() {
                 {/* Notification Channels Section */}
                 <div className="space-y-4">
                   <Label className="text-base font-semibold">Notification Channels</Label>
-                  <div className="grid grid-cols-1 gap-3">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="flex items-center gap-2">
                         <Smartphone className="size-4 text-primary" />
                         <span className="text-sm">Push Notifications</span>
                       </div>
-                      <Switch checked={pushEnabled} onCheckedChange={(enabled) => handleNotificationSettingChange('push', enabled)} />
+                      <Switch 
+                        checked={editingAlertChannels?.pushEnabled || false} 
+                        onCheckedChange={(enabled) => handleAlertChannelChange('push', enabled)} 
+                      />
                     </div>
                     
                     <div className="p-3 rounded-lg border space-y-2">
@@ -1101,10 +1350,15 @@ export default function Dashboard() {
                           <span className="text-sm">SMS Alerts</span>
                         </div>
                         <Switch 
-                          checked={smsEnabled} 
-                          onCheckedChange={(enabled) => handleNotificationSettingChange('sms', enabled)}
+                          checked={editingAlertChannels?.smsEnabled || false} 
+                          onCheckedChange={(enabled) => handleAlertChannelChange('sms', enabled)}
                         />
                       </div>
+                      {!phoneVerified && (
+                        <p className="text-xs text-muted-foreground pl-6">
+                          Phone verification required in Settings
+                        </p>
+                      )}
                     </div>
 
                     <div className="p-3 rounded-lg border space-y-2">
@@ -1114,21 +1368,27 @@ export default function Dashboard() {
                           <span className="text-sm">Phone Calls</span>
                         </div>
                         <Switch 
-                          checked={callsEnabled} 
-                          onCheckedChange={(enabled) => handleNotificationSettingChange('calls', enabled)}
+                          checked={editingAlertChannels?.callsEnabled || false} 
+                          onCheckedChange={(enabled) => handleAlertChannelChange('calls', enabled)}
                         />
                       </div>
+                      {!phoneVerified && (
+                        <p className="text-xs text-muted-foreground pl-6">
+                          Phone verification required in Settings
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
 
                 {/* Metrics Configuration Section */}
                 {editingAlertMetrics && (
-                <div className="space-y-4">
-                  <Label className="text-base font-semibold">Alert Metrics</Label>
-
-                  {/* Market Cap Alerts */}
-                  <div className="p-4 rounded-lg border space-y-3">
+                                 <div className="space-y-6">
+                   <Label className="text-base font-semibold">Alert Metrics</Label>
+                   
+                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                     {/* Market Cap Alerts */}
+                     <div className="p-4 rounded-lg border space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Market Cap Alerts</span>
                       <Switch
@@ -1174,8 +1434,8 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Price Change Alerts */}
-                  <div className="p-4 rounded-lg border space-y-3">
+                                       {/* Price Change Alerts */}
+                     <div className="p-4 rounded-lg border space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Price Change Alerts</span>
                       <Switch
@@ -1204,8 +1464,11 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Volume Alerts */}
-                  <div className="p-4 rounded-lg border space-y-3">
+                                     </div>
+                   
+                   {/* Volume Alerts - Full Width */}
+                   <div className="lg:col-span-2">
+                     <div className="p-4 rounded-lg border space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Volume Alerts</span>
                       <Switch
@@ -1253,8 +1516,9 @@ export default function Dashboard() {
                         </div>
                       </div>
                     )}
-                  </div>
-                </div>
+                     </div>
+                   </div>
+                 </div>
                 )}
 
                 <div className="flex gap-2 pt-4">
@@ -1267,12 +1531,22 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
+        <AnimatePresence>
         {viewingMetrics && !editingAlert && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4">
-            <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-border/40 bg-gradient-to-b from-background to-muted/10 shadow-2xl backdrop-blur">
+          <motion.div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+            <motion.div variants={modalVariants} initial="hidden" animate="visible" exit="exit">
+              <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-border/40 bg-gradient-to-b from-background to-muted/10 shadow-2xl backdrop-blur">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl font-semibold">Alerts</CardTitle>
@@ -1284,8 +1558,28 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {alerts.map((alert) => (
-                    <div key={alert.id} className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-muted/20">
+                  <AnimatePresence mode="popLayout">
+                    {alerts.map((alert, index) => (
+                      <motion.div 
+                        key={alert.id} 
+                        layoutId={`metrics-${alert.id}`}
+                        initial={{ opacity: 0, x: -20, scale: 0.95 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ 
+                          opacity: 0, 
+                          x: 20, 
+                          scale: 0.8,
+                          transition: { duration: 0.3, ease: "easeInOut" }
+                        }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 300,
+                          damping: 25,
+                          duration: 0.4
+                        }}
+                        layout
+                        className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-muted/20 transition-colors duration-200"
+                      >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         {/* Status Badge */}
                         <div className={`px-2 py-1 rounded text-xs flex items-center gap-1 ${
@@ -1354,8 +1648,9 @@ export default function Dashboard() {
                           />
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
+                  </AnimatePresence>
                 </div>
 
                 <div className="flex justify-end pt-4">
@@ -1363,56 +1658,103 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Create Alert Button - shown when token is selected and not editing */}
-        {selectedToken && !editingAlert && !viewingMetrics && (
-          <div className="fixed bottom-8 right-8 z-30">
-            <Button onClick={createAlert} size="lg" className="shadow-lg">
-              <Plus className="size-4 mr-2" />
-              Create Alert for {selectedToken.symbol}
-            </Button>
-          </div>
-        )}
+        <AnimatePresence>
+          {selectedToken && !editingAlert && !viewingMetrics && (
+            <motion.div 
+              className="fixed bottom-8 right-8 z-30"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 25 
+              }}
+            >
+              <Button onClick={createAlert} size="lg" className="shadow-lg">
+                <Plus className="size-4 mr-2" />
+                Create Alert for {selectedToken.symbol}
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Phone Verification Prompt Dialog */}
+        <AnimatePresence>
         {showVerificationPrompt && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-gradient-to-b from-background to-muted/10 border border-border/40 rounded-lg p-6 max-w-md w-full shadow-2xl backdrop-blur">
-              <div className="flex items-center gap-3 mb-4">
-                <Phone className="size-6 text-yellow-500" />
-                <h3 className="text-lg font-semibold">Phone Verification Required</h3>
-              </div>
-              
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
+          <motion.div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+            <motion.div 
+              className="bg-gradient-to-b from-background to-muted/10 border border-border/40 rounded-xl p-8 max-w-md w-full shadow-2xl backdrop-blur-md"
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              {/* Header */}
+              <div className="text-center mb-8">
+                <div className="size-16 rounded-full bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-white shadow-lg mx-auto mb-4">
+                  <Phone className="size-8" />
+                </div>
+                <h3 className="text-2xl font-bold mb-2">Phone Verification Required</h3>
+                <p className="text-muted-foreground">
                   To enable {pendingNotificationType?.toUpperCase()} notifications, you need to verify your phone number first.
                 </p>
+              </div>
+              
+              {/* Content */}
+              <div className="space-y-6">
+                <div className="p-4 bg-muted/30 backdrop-blur-sm rounded-lg border border-border/20">
+                  <div className="flex items-start gap-3">
+                    <div className="size-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Bell className="size-3 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-1">Enhanced Notifications</p>
+                      <p className="text-sm text-muted-foreground">
+                        Get real-time SMS and call alerts even when you're away from your computer.
+                      </p>
+                    </div>
+                  </div>
+                </div>
                 
-                <p className="text-sm">
-                  Would you like to verify your phone number now?
-                </p>
-                
-                <div className="flex gap-3 pt-2">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => handleVerificationPromptResponse(false)}
-                    className="flex-1"
-                  >
-                    Not Now
-                  </Button>
-                  <Button 
-                    onClick={() => handleVerificationPromptResponse(true)}
-                    className="flex-1"
-                  >
-                    Verify Phone
-                  </Button>
+                <div className="text-center">
+                  <p className="text-base font-medium mb-4">
+                    Would you like to verify your phone number now?
+                  </p>
+                  
+                  <div className="flex flex-col gap-3">
+                    <Button 
+                      onClick={() => handleVerificationPromptResponse(true)}
+                      className="w-full h-12 rounded-lg text-base font-medium"
+                    >
+                      Verify Phone
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => handleVerificationPromptResponse(false)}
+                      className="w-full h-12 rounded-lg bg-background/50 hover:bg-background/80 border-border/40 transition-all duration-200"
+                    >
+                      Not Now
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
           </div>
           <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-black/10 dark:ring-white/10 pointer-events-none"></div>
         </div>

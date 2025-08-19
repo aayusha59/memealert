@@ -111,7 +111,10 @@ export async function saveUserAlerts(userId: string, alerts: any[]) {
       change_24h: alert.change24h,
       volume_24h: alert.volume24h,
       price: alert.price,
-      notifications_enabled: alert.notificationsEnabled
+      notifications_enabled: alert.notificationsEnabled,
+      push_enabled: alert.notificationChannels?.pushEnabled ?? true,
+      sms_enabled: alert.notificationChannels?.smsEnabled ?? false,
+      calls_enabled: alert.notificationChannels?.callsEnabled ?? false
     }))
 
     console.log('📝 Inserting new alerts:', alertsWithUserId)
@@ -200,6 +203,11 @@ export async function getUserAlerts(userId: string) {
       volume24h: alert.volume_24h,
       price: alert.price,
       notificationsEnabled: alert.notifications_enabled,
+      notificationChannels: {
+        pushEnabled: alert.push_enabled ?? true,
+        smsEnabled: alert.sms_enabled ?? false,
+        callsEnabled: alert.calls_enabled ?? false
+      },
       metrics: metricsData ? {
         marketCapEnabled: metricsData.market_cap_enabled || false,
         priceChangeEnabled: metricsData.price_change_enabled || false,
@@ -608,5 +616,39 @@ export async function getUserPhoneStatus(userId: string) {
     phoneNumber: data.phone_number,
     phoneVerified: data.phone_verified,
     phoneVerifiedAt: data.phone_verified_at
+  }
+}
+
+// Helper function to update alert notification channels
+export async function updateAlertNotificationChannels(alertId: string, channels: {
+  pushEnabled: boolean
+  smsEnabled: boolean
+  callsEnabled: boolean
+}) {
+  console.log('🔔 updateAlertNotificationChannels called with:', { alertId, channels })
+  
+  try {
+    const { data, error } = await supabase
+      .from('alerts')
+      .update({
+        push_enabled: channels.pushEnabled,
+        sms_enabled: channels.smsEnabled,
+        calls_enabled: channels.callsEnabled,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', alertId)
+      .select('*')
+      .single()
+
+    if (error) {
+      console.error('❌ Error updating alert notification channels:', error)
+      throw error
+    }
+
+    console.log('✅ Alert notification channels updated successfully:', data)
+    return data
+  } catch (error) {
+    console.error('❌ Error in updateAlertNotificationChannels:', error)
+    throw error
   }
 }
