@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   ArrowLeft,
   Search,
@@ -20,7 +21,8 @@ import {
   Settings,
   X,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Home
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,8 +36,9 @@ import { useWallet } from "@/contexts/WalletContext"
 import { toast } from "sonner"
 import { DatabaseTest } from "@/components/DatabaseTest"
 import { WalletConnectButton } from "@/components/WalletConnectButton"
-import PhoneVerification from "@/components/Settings/PhoneVerification"
-import { deleteUserAlert, saveNotificationSettings, updateAlertNotificationStatus, cleanupDuplicateAlertMetrics, cleanupDuplicateNotificationSettings, cleanupDuplicatePhoneVerifications } from "@/lib/supabase"
+import { PhoneVerification } from "@/components/Settings/PhoneVerification"
+
+import { deleteUserAlert, saveNotificationSettings, updateAlertNotificationStatus, cleanupDuplicateAlertMetrics, cleanupDuplicateNotificationSettings } from "@/lib/supabase"
 
 interface TokenResult {
   address: string
@@ -58,6 +61,11 @@ interface Alert {
   volume24h: number
   price: number
   notificationsEnabled: boolean
+  notificationChannels?: {
+    pushEnabled: boolean
+    smsEnabled: boolean
+    callsEnabled: boolean
+  }
   metrics?: {
     marketCapEnabled: boolean
     priceChangeEnabled: boolean
@@ -72,6 +80,106 @@ interface Alert {
 
 type AlertMetrics = NonNullable<Alert['metrics']>
 
+// Animation variants
+const modalVariants = {
+  hidden: { 
+    opacity: 0, 
+    scale: 0.95,
+    y: 20
+  },
+  visible: { 
+    opacity: 1, 
+    scale: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.3
+    }
+  },
+  exit: { 
+    opacity: 0, 
+    scale: 0.95,
+    y: 20,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.2
+    }
+  }
+}
+
+const backdropVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: { duration: 0.2, ease: "easeInOut" }
+  },
+  exit: { 
+    opacity: 0,
+    transition: { duration: 0.2, ease: "easeInOut" }
+  }
+}
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { 
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+}
+
+const dashboardCardVariants = {
+  hidden: { 
+    opacity: 0, 
+    y: 30,
+    scale: 0.95
+  },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.5
+    }
+  }
+}
+
+const alertItemVariants = {
+  hidden: { 
+    opacity: 0, 
+    x: -20,
+    scale: 0.95
+  },
+  visible: { 
+    opacity: 1, 
+    x: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+      duration: 0.4
+    }
+  },
+  exit: {
+    opacity: 0,
+    x: 20,
+    scale: 0.8,
+    transition: {
+      type: "spring" as const,
+      stiffness: 400,
+      damping: 30,
+      duration: 0.3
+    }
+  }
+}
+
 export default function Dashboard() {
   const { 
     walletAddress, 
@@ -80,22 +188,23 @@ export default function Dashboard() {
     isLoading, 
     alerts: walletAlerts,
     saveAlerts,
-    phoneNumber: contextPhoneNumber,
-    isPhoneVerified: contextIsPhoneVerified,
-    verificationStep: contextVerificationStep,
+
     pushEnabled: contextPushEnabled,
     smsEnabled: contextSmsEnabled,
     callsEnabled: contextCallsEnabled,
-    setPhoneVerified,
+    phoneVerified,
+    phoneNumber,
+
     setNotificationSettings,
     refreshUserData,
     reloadAlerts,
     updateAlertNotification,
-    updateAlertMetrics: updateContextAlertMetrics
+    updateAlertMetrics: updateContextAlertMetrics,
+    updateAlertChannels: updateContextAlertChannels
   } = useWallet()
   
 
-  const [showVerificationPopup, setShowVerificationPopup] = useState(false)
+
 
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<TokenResult[]>([])
@@ -114,29 +223,35 @@ export default function Dashboard() {
   const [returnToMetrics, setReturnToMetrics] = useState(false)
   const [editingAlert, setEditingAlert] = useState<Alert | null>(null)
   const [editingAlertMetrics, setEditingAlertMetrics] = useState<AlertMetrics | null>(null)
+  const [editingAlertChannels, setEditingAlertChannels] = useState<{
+    pushEnabled: boolean
+    smsEnabled: boolean
+    callsEnabled: boolean
+  } | null>(null)
   const [marketCapHigh, setMarketCapHigh] = useState([1000000])
   const [marketCapLow, setMarketCapLow] = useState([500000])
   const [priceChange, setPriceChange] = useState([20])
   const [volumePeriod, setVolumePeriod] = useState("5m")
   const [volumeThreshold, setVolumeThreshold] = useState(100000)
 
-  // Phone verification state is now handled by the PhoneVerification component
+
 
   // Debug context values
   console.log('🔍 Context values:', {
-    contextPhoneNumber,
-    contextIsPhoneVerified,
-    contextVerificationStep,
     contextPushEnabled,
     contextSmsEnabled,
     contextCallsEnabled
   });
 
-  const [pushEnabled, setPushEnabled] = useState(contextPushEnabled)
-  const [smsEnabled, setSmsEnabled] = useState(contextSmsEnabled)
-  const [callsEnabled, setCallsEnabled] = useState(contextCallsEnabled)
+  // Use context values for notification settings to ensure visual sync
+  const pushEnabled = contextPushEnabled
+  const smsEnabled = contextSmsEnabled
+  const callsEnabled = contextCallsEnabled
 
   const [showSettings, setShowSettings] = useState(false)
+  const [showVerificationPrompt, setShowVerificationPrompt] = useState(false)
+  const [pendingNotificationType, setPendingNotificationType] = useState<'sms' | 'calls' | null>(null)
+  const [isAddingAlert, setIsAddingAlert] = useState(false)
 
   const searchTokens = async (query: string) => {
     if (!query.trim()) {
@@ -210,6 +325,8 @@ export default function Dashboard() {
       return;
     }
 
+    setIsAddingAlert(true);
+
     const newAlert = {
       id: Date.now().toString(),
       ticker: selectedToken.symbol,
@@ -221,6 +338,11 @@ export default function Dashboard() {
       volume24h: selectedToken.volume24h,
       price: selectedToken.price,
       notificationsEnabled: true,
+      notificationChannels: {
+        pushEnabled: true,
+        smsEnabled: false,
+        callsEnabled: false,
+      },
       metrics: {
         marketCapEnabled: marketCapEnabled,
         priceChangeEnabled: priceChangeEnabled,
@@ -243,9 +365,15 @@ export default function Dashboard() {
     } catch (error) {
       toast.error("Failed to save alert");
       console.error("Error saving alert:", error);
+      setIsAddingAlert(false);
     }
     
     setSelectedToken(null); // Clear selection after creating alert
+    
+    // Clear the adding flag after a delay to allow animation to complete
+    setTimeout(() => {
+      setIsAddingAlert(false);
+    }, 500);
   }
 
   const copyToClipboard = (text: string) => {
@@ -326,10 +454,15 @@ export default function Dashboard() {
       volumeThreshold: 100000,
       volumePeriod: "24 hours"
     })
+    setEditingAlertChannels(alert.notificationChannels || {
+      pushEnabled: true,
+      smsEnabled: false,
+      callsEnabled: false,
+    })
   }
 
   const saveAlertChanges = async () => {
-    if (!editingAlert || !editingAlertMetrics) {
+    if (!editingAlert || !editingAlertMetrics || !editingAlertChannels) {
       toast.error("No alert to update");
       return;
     }
@@ -338,12 +471,8 @@ export default function Dashboard() {
       // Update metrics in database and context
       await updateContextAlertMetrics(editingAlert.id, editingAlertMetrics);
       
-      // Update local state to match context
-      const updatedAlerts = alerts.map((alert) => 
-        alert.id === editingAlert.id ? { ...alert, metrics: editingAlertMetrics } : alert
-      );
-      
-      setAlerts(updatedAlerts);
+      // Update notification channels in database and context
+      await updateContextAlertChannels(editingAlert.id, editingAlertChannels);
       
       toast.success("Alert updated successfully");
     } catch (error) {
@@ -353,6 +482,7 @@ export default function Dashboard() {
     
     setEditingAlert(null);
     setEditingAlertMetrics(null);
+    setEditingAlertChannels(null);
     
     if (returnToMetrics) {
       setViewingMetrics(true);
@@ -363,10 +493,28 @@ export default function Dashboard() {
   const cancelEdit = () => {
     setEditingAlert(null)
     setEditingAlertMetrics(null)
+    setEditingAlertChannels(null)
     if (returnToMetrics) {
       setViewingMetrics(true)
       setReturnToMetrics(false)
     }
+  }
+
+  const handleAlertChannelChange = (channel: 'push' | 'sms' | 'calls', enabled: boolean) => {
+    if (!editingAlertChannels) return;
+    
+    // Check if trying to enable SMS or Calls without phone verification
+    if ((channel === 'sms' || channel === 'calls') && enabled && !phoneVerified) {
+      toast.error(`Phone verification required to enable ${channel.toUpperCase()} notifications for this alert`);
+      return;
+    }
+
+    const updatedChannels = {
+      ...editingAlertChannels,
+      [`${channel}Enabled`]: enabled
+    };
+    
+    setEditingAlertChannels(updatedChannels);
   }
 
   const cleanupAllDuplicates = async () => {
@@ -374,9 +522,7 @@ export default function Dashboard() {
       console.log('🧹 Starting cleanup of all duplicate data...')
       
       if (userId) {
-        // Clean up duplicate phone verifications for the user
-        await cleanupDuplicatePhoneVerifications(userId)
-        console.log('✅ Phone verification duplicates cleaned up')
+
         
         // Clean up duplicate notification settings for the user
         await cleanupDuplicateNotificationSettings(userId)
@@ -399,31 +545,14 @@ export default function Dashboard() {
     }
   }
 
-  // Sync context values with local state when they change
-  useEffect(() => {
-    setPushEnabled(contextPushEnabled)
-    setSmsEnabled(contextSmsEnabled)
-    setCallsEnabled(contextCallsEnabled)
-  }, [contextPushEnabled, contextSmsEnabled, contextCallsEnabled])
 
-  // Automatically disable SMS and Calls if phone verification is lost
-  useEffect(() => {
-    if (!contextIsPhoneVerified && (smsEnabled || callsEnabled)) {
-      setSmsEnabled(false);
-      setCallsEnabled(false);
-      // Update context and database
-      if (userId) {
-        const newSettings = { pushEnabled, smsEnabled: false, callsEnabled: false };
-        setNotificationSettings(newSettings);
-        saveNotificationSettings(userId, newSettings).catch(console.error);
-      }
-    }
-  }, [contextIsPhoneVerified, smsEnabled, callsEnabled, userId, pushEnabled, setNotificationSettings])
+
+
 
   // Sync alerts from context when they change (important for page refresh)
-  // Only sync when not editing and when alerts are actually different
+  // Only sync when not editing and not adding an alert and when alerts are actually different
   useEffect(() => {
-    if (walletAlerts && walletAlerts.length > 0 && !editingAlert) {
+    if (walletAlerts && walletAlerts.length > 0 && !editingAlert && !isAddingAlert) {
       // Check if the alerts are actually different from current local state
       const currentAlertsString = JSON.stringify(alerts)
       const contextAlertsString = JSON.stringify(walletAlerts)
@@ -433,7 +562,7 @@ export default function Dashboard() {
         setAlerts(walletAlerts)
       }
     }
-  }, [walletAlerts, editingAlert, alerts])
+  }, [walletAlerts, editingAlert, isAddingAlert])
 
   // Debug logging for state restoration
   useEffect(() => {
@@ -464,7 +593,7 @@ export default function Dashboard() {
 
 
 
-  // Phone verification is now handled by the PhoneVerification component
+
 
   const handleNotificationSettingChange = async (setting: 'push' | 'sms' | 'calls', enabled: boolean) => {
     if (!userId) {
@@ -472,9 +601,10 @@ export default function Dashboard() {
       return;
     }
 
-    // Check if user is trying to enable SMS or Calls without phone verification
-    if ((setting === 'sms' || setting === 'calls') && enabled && !contextIsPhoneVerified) {
-      setShowVerificationPopup(true);
+    // Check if trying to enable SMS or Calls without phone verification
+    if ((setting === 'sms' || setting === 'calls') && enabled && !phoneVerified) {
+      setPendingNotificationType(setting);
+      setShowVerificationPrompt(true);
       return;
     }
 
@@ -483,15 +613,12 @@ export default function Dashboard() {
       
       switch (setting) {
         case 'push':
-          setPushEnabled(enabled);
           newSettings = { pushEnabled: enabled, smsEnabled, callsEnabled };
           break;
         case 'sms':
-          setSmsEnabled(enabled);
           newSettings = { pushEnabled, smsEnabled: enabled, callsEnabled };
           break;
         case 'calls':
-          setCallsEnabled(enabled);
           newSettings = { pushEnabled, smsEnabled, callsEnabled: enabled };
           break;
       }
@@ -502,68 +629,78 @@ export default function Dashboard() {
       // Update context
       setNotificationSettings(newSettings);
       
-      // Refresh user data to ensure everything is in sync
-      await refreshUserData();
-      
       toast.success(`${setting.toUpperCase()} notifications ${enabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       toast.error(`Failed to update ${setting} notifications`);
       console.error(`Error updating ${setting} notifications:`, error);
-      
-      // Revert local state on error
-      switch (setting) {
-        case 'push':
-          setPushEnabled(!enabled);
-          break;
-        case 'sms':
-          setSmsEnabled(!enabled);
-          break;
-        case 'calls':
-          setCallsEnabled(!enabled);
-          break;
-      }
     }
   }
 
-  // Phone number changes are now handled by the PhoneVerification component
+  const handleVerificationPromptResponse = (verify: boolean) => {
+    setShowVerificationPrompt(false);
+    
+    if (verify && pendingNotificationType) {
+      // User chose to verify - this would trigger the phone verification in settings
+      toast.info(`Please complete phone verification in Settings to enable ${pendingNotificationType.toUpperCase()} notifications`);
+      setShowSettings(true); // Open settings automatically
+    }
+    
+    setPendingNotificationType(null);
+  }
+
+
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur-sm">
-        <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => (window.location.href = "/")} className="flex items-center gap-2">
-              <ArrowLeft className="size-4" />
-              Back to Home
-            </Button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">M</span>
-              </div>
-              <h1 className="text-xl font-bold">Memealert Dashboard</h1>
+      <header className="sticky top-0 z-50 w-full backdrop-blur-md transition-all duration-300 bg-background/95 border-b border-border/40 shadow-lg">
+        <div className="container flex h-16 items-center justify-center relative">
+          {/* Left Section - Logo and Title */}
+          <div className="absolute left-0 flex items-center gap-2">
+            <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground font-bold shadow-lg">
+              M
             </div>
+            <h1 className="text-xl font-bold">Memealert Dashboard</h1>
           </div>
-          <div className="flex items-center gap-2">
-                          <Button variant="outline" onClick={() => {
-                setShowSettings(true);
-              }} className="flex items-center gap-2">
+          
+          {/* Centered Navigation Pills */}
+          <nav className="hidden md:flex items-center gap-2 bg-muted/30 backdrop-blur-sm rounded-full px-4 py-2 border border-border/40">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => (window.location.href = "/")}
+              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
+            >
+              <Home className="size-4" />
+              Home
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => setShowSettings(true)}
+              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
+            >
               <Settings className="size-4" />
               Settings
             </Button>
             <Button 
-              variant="outline" 
+              variant="ghost" 
+              size="sm"
               onClick={() => refreshUserData()} 
-              className="flex items-center gap-2"
               disabled={isLoading}
+              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
             >
               <RefreshCw className="size-4" />
               Refresh
             </Button>
+          </nav>
+          
+          {/* Right Section - Wallet Connection */}
+          <div className="absolute right-0 flex items-center gap-2">
             {isWalletConnected ? (
-              <Button variant="outline" className="flex items-center gap-2">
+              <Button variant="outline" className="flex items-center gap-2 rounded-full bg-muted/30 backdrop-blur-sm border-border/40 hover:bg-background/50 transition-all duration-200">
                 <Wallet className="size-4" />
-                {walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : 'Disconnect'}
+                {walletAddress ? `${walletAddress!.substring(0, 4)}...${walletAddress!.substring(Math.max(0, walletAddress!.length - 4))}` : 'Connected'}
               </Button>
             ) : (
               <div data-wallet-button className="flex justify-center">
@@ -574,98 +711,120 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="container py-8 max-w-7xl relative">
-        {/* Temporary Database Test Component */}
-        <div className="mb-8">
-          <DatabaseTest />
-        </div>
-
-        {/* Debug Info */}
-        <div className="mb-8 p-4 border rounded-lg bg-muted/20">
-          <h3 className="text-lg font-semibold mb-2">Debug Info</h3>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p><strong>Context Alerts:</strong> {walletAlerts?.length || 0}</p>
-              <p><strong>Local Alerts:</strong> {alerts?.length || 0}</p>
-              <p><strong>Is Loading:</strong> {isLoading ? 'Yes' : 'No'}</p>
-              <p><strong>Wallet Connected:</strong> {isWalletConnected ? 'Yes' : 'No'}</p>
-            </div>
-            <div>
-              <p><strong>User ID:</strong> {userId || 'None'}</p>
-              <p><strong>Wallet Address:</strong> {walletAddress ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : 'None'}</p>
-              <p><strong>Has LocalStorage:</strong> {typeof window !== 'undefined' && localStorage.getItem("connectedWallet") ? 'Yes' : 'No'}</p>
-            </div>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => refreshUserData()}
-              disabled={isLoading}
-            >
-              Force Refresh Data
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => reloadAlerts()}
-              disabled={isLoading}
-            >
-              Reload Alerts
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => {
-                console.log('🔄 Manual sync - Context alerts:', walletAlerts);
-                console.log('🔄 Manual sync - Local alerts:', alerts);
-                if (walletAlerts && walletAlerts.length > 0) {
-                  setAlerts(walletAlerts);
-                  toast.success(`Synced ${walletAlerts.length} alerts from context`);
-                } else {
-                  toast.error('No alerts in context to sync');
-                }
-              }}
-            >
-              Sync Alerts from Context
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={cleanupAllDuplicates}
-              disabled={isLoading}
-            >
-              Cleanup Duplicates
-            </Button>
-          </div>
-        </div>
+      <main className="container py-8 max-w-7xl relative overflow-hidden">
+        {/* Background with grid pattern */}
+        <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-black bg-[linear-gradient(to_right,#f0f0f0_1px,transparent_1px),linear-gradient(to_bottom,#f0f0f0_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1f1f1f_1px,transparent_1px),linear-gradient(to_bottom,#1f1f1f_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]"></div>
         
-        {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="size-8 animate-spin text-primary" />
-            <span className="ml-2 text-lg">Loading your data...</span>
-          </div>
-        ) : !isWalletConnected ? (
-          <div className="flex items-center justify-center h-64">
-                          <div className="text-center">
-                <Wallet className="size-16 mx-auto mb-4 text-muted-foreground" />
-                <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
-                <p className="text-muted-foreground mb-4">Connect your Solana wallet to view and manage your alerts</p>
-                <div data-wallet-connect-center className="flex justify-center">
-                  <WalletConnectButton />
+        {/* Corner glows */}
+        <div className="absolute -bottom-6 -right-6 -z-10 h-[300px] w-[300px] rounded-full bg-gradient-to-br from-primary/30 to-secondary/30 blur-3xl opacity-70"></div>
+        <div className="absolute -top-6 -left-6 -z-10 h-[300px] w-[300px] rounded-full bg-gradient-to-br from-secondary/30 to-primary/30 blur-3xl opacity-70"></div>
+        
+        {/* Main Dashboard Container with outline */}
+        <div className="rounded-xl overflow-hidden shadow-2xl border border-border/40 bg-gradient-to-b from-background to-muted/20 relative">
+          <div className="bg-background p-8">
+            {/* Database Test Component - Hidden in production */}
+            {process.env.NODE_ENV === 'development' && false && (
+              <div className="mb-8">
+                <DatabaseTest />
+              </div>
+            )}
+
+            {/* Debug Info - Hidden in production */}
+            {process.env.NODE_ENV === 'development' && false && (
+              <div className="mb-8 p-4 border rounded-lg bg-muted/20">
+                <h3 className="text-lg font-semibold mb-2">Debug Info</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p><strong>Context Alerts:</strong> {walletAlerts?.length || 0}</p>
+                    <p><strong>Local Alerts:</strong> {alerts?.length || 0}</p>
+                    <p><strong>Is Loading:</strong> {isLoading ? 'Yes' : 'No'}</p>
+                    <p><strong>Wallet Connected:</strong> {isWalletConnected ? 'Yes' : 'No'}</p>
+                  </div>
+                  <div>
+                    <p><strong>User ID:</strong> {userId || 'None'}</p>
+                    <p><strong>Wallet Address:</strong> {walletAddress ? `${walletAddress!.substring(0, 4)}...${walletAddress!.substring(Math.max(0, walletAddress!.length - 4))}` : 'None'}</p>
+                    <p><strong>Has LocalStorage:</strong> {typeof window !== 'undefined' && localStorage.getItem("connectedWallet") ? 'Yes' : 'No'}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => refreshUserData()}
+                    disabled={isLoading}
+                  >
+                    Force Refresh Data
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => reloadAlerts()}
+                    disabled={isLoading}
+                  >
+                    Reload Alerts
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => {
+                      console.log('🔄 Manual sync - Context alerts:', walletAlerts);
+                      console.log('🔄 Manual sync - Local alerts:', alerts);
+                      if (walletAlerts && walletAlerts.length > 0) {
+                        setAlerts(walletAlerts);
+                        toast.success(`Synced ${walletAlerts.length} alerts from context`);
+                      } else {
+                        toast.error('No alerts in context to sync');
+                      }
+                    }}
+                  >
+                    Sync Alerts from Context
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={cleanupAllDuplicates}
+                    disabled={isLoading}
+                  >
+                    Cleanup Duplicates
+                  </Button>
                 </div>
               </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-          {/* Left Column - Alert Configuration */}
-          <div className="lg:col-span-3 space-y-8">
+            )}
+            
+            {isLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="size-8 animate-spin text-primary" />
+                <span className="ml-2 text-lg">Loading your data...</span>
+              </div>
+            ) : !isWalletConnected ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                  <Wallet className="size-16 mx-auto mb-4 text-muted-foreground" />
+                  <h2 className="text-2xl font-bold mb-2">Connect Your Wallet</h2>
+                  <p className="text-muted-foreground mb-4">Connect your Solana wallet to view and manage your alerts</p>
+                  <div data-wallet-connect-center className="flex justify-center">
+                    <WalletConnectButton />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <motion.div 
+                className="grid grid-cols-1 lg:grid-cols-5 gap-8"
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+              >
+                {/* Left Column - Alert Configuration */}
+                <div className="lg:col-span-3 space-y-8">
             {/* Search Token Section */}
-            <Card className="border-border/40 bg-gradient-to-b from-background to-muted/10">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl">Search Solana Token</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground size-4" />
                   <Input
@@ -674,42 +833,42 @@ export default function Dashboard() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
+                </div>
 
-                  {showSearchResults && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-background border border-border/40 rounded-lg shadow-lg z-10 max-h-80 overflow-y-auto">
-                      {isSearching ? (
-                        <div className="p-4 text-center text-muted-foreground">Searching tokens...</div>
-                      ) : searchResults.length > 0 ? (
-                        searchResults.map((token) => (
-                          <button
-                            key={token.address}
-                            onClick={() => selectToken(token)}
-                            className="w-full p-4 text-left hover:bg-muted/50 border-b border-border/20 last:border-b-0 transition-colors"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-semibold">
-                                    {token.name} ({token.symbol})
-                                  </span>
-                                </div>
-                                <div className="text-sm text-muted-foreground font-mono">
-                                  {token.address.slice(0, 8)}...{token.address.slice(-8)}
-                                </div>
+                {showSearchResults && (
+                  <div className="border border-border/40 rounded-lg bg-muted/20 max-h-80 overflow-y-auto">
+                    {isSearching ? (
+                      <div className="p-4 text-center text-muted-foreground">Searching tokens...</div>
+                    ) : searchResults.length > 0 ? (
+                      searchResults.map((token) => (
+                        <button
+                          key={token.address}
+                          onClick={() => selectToken(token)}
+                          className="w-full p-4 text-left hover:bg-muted/50 border-b border-border/20 last:border-b-0 transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold">
+                                  {token.name} ({token.symbol})
+                                </span>
                               </div>
-                              <div className="text-right">
-                                <div className="font-semibold">${token.price.toFixed(6)}</div>
-                                <div className="text-sm text-muted-foreground">{formatNumber(token.marketCap)}</div>
+                              <div className="text-sm text-muted-foreground font-mono">
+                                {token.address.slice(0, 8)}...{token.address.slice(-8)}
                               </div>
                             </div>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="p-4 text-center text-muted-foreground">No tokens found</div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                            <div className="text-right">
+                              <div className="font-semibold">${token.price.toFixed(6)}</div>
+                              <div className="text-sm text-muted-foreground">{formatNumber(token.marketCap)}</div>
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-muted-foreground">No tokens found</div>
+                    )}
+                  </div>
+                )}
 
                 {selectedToken && (
                   <div className="mt-4 p-4 bg-muted/30 border border-border/40 rounded-lg">
@@ -729,9 +888,13 @@ export default function Dashboard() {
                 )}
               </CardContent>
             </Card>
+            </motion.div>
 
             {/* Notification Channels */}
-            <Card className="border-border/40 bg-gradient-to-b from-background to-muted/10">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl flex items-center gap-2">
                   <Bell className="size-5" />
@@ -740,10 +903,10 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-lg border space-y-3">
+                  <div className="p-4 rounded-lg border border-border/40 bg-muted/20 space-y-3 transition-all hover:bg-muted/30">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Smartphone className="size-4" />
+                        <Smartphone className="size-4 text-primary" />
                         <span className="font-medium">Push</span>
                       </div>
                       <Switch checked={pushEnabled} onCheckedChange={(enabled) => handleNotificationSettingChange('push', enabled)} />
@@ -751,57 +914,43 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground">Browser alerts for desktop and mobile devices</p>
                   </div>
 
-                  <div className="p-4 rounded-lg border space-y-3">
+                  <div className="p-4 rounded-lg border border-border/40 bg-muted/20 space-y-3 transition-all hover:bg-muted/30">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <MessageSquare className="size-4" />
+                        <MessageSquare className="size-4 text-green-500" />
                         <span className="font-medium">SMS</span>
                       </div>
-                      <Switch checked={smsEnabled} onCheckedChange={(enabled) => handleNotificationSettingChange('sms', enabled)} />
+                      <Switch 
+                        checked={smsEnabled} 
+                        onCheckedChange={(enabled) => handleNotificationSettingChange('sms', enabled)}
+                      />
                     </div>
                     <p className="text-sm text-muted-foreground">Text messages with token and metric updates</p>
-                    {smsEnabled && contextIsPhoneVerified && (
-                      <div className="text-sm text-green-500 flex items-center gap-1">
-                        <Check className="size-4" />
-                        SMS enabled for verified number: {contextPhoneNumber}
-                      </div>
-                    )}
-                    {smsEnabled && !contextIsPhoneVerified && (
-                      <div className="text-sm text-amber-500 flex items-center gap-1">
-                        <XCircle className="size-4" />
-                        Phone number must be verified to enable SMS
-                      </div>
-                    )}
                   </div>
 
-                  <div className="p-4 rounded-lg border space-y-3">
+                  <div className="p-4 rounded-lg border border-border/40 bg-muted/20 space-y-3 transition-all hover:bg-muted/30">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Phone className="size-4" />
+                        <Phone className="size-4 text-red-500" />
                         <span className="font-medium">Calls</span>
                       </div>
-                      <Switch checked={callsEnabled} onCheckedChange={(enabled) => handleNotificationSettingChange('calls', enabled)} />
+                      <Switch 
+                        checked={callsEnabled} 
+                        onCheckedChange={(enabled) => handleNotificationSettingChange('calls', enabled)}
+                      />
                     </div>
                     <p className="text-sm text-muted-foreground">Voice calls for critical alerts and wake-up alarms</p>
-                    {callsEnabled && contextIsPhoneVerified && (
-                      <div className="text-sm text-green-500 flex items-center gap-1">
-                        <Check className="size-4" />
-                        Calls enabled for verified number: {contextPhoneNumber}
-                      </div>
-                    )}
-                    {callsEnabled && !contextIsPhoneVerified && (
-                      <div className="text-sm text-amber-500 flex items-center gap-1">
-                        <XCircle className="size-4" />
-                        Phone number must be verified to enable calls
-                      </div>
-                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
+            </motion.div>
 
             {/* Market Cap Alerts */}
-            <Card className="border-border/40 bg-gradient-to-b from-background to-muted/10">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">Market Cap Alerts</CardTitle>
@@ -842,9 +991,13 @@ export default function Dashboard() {
                 </CardContent>
               )}
             </Card>
+            </motion.div>
 
             {/* Price Change Alerts */}
-            <Card className="border-border/40 bg-gradient-to-b from-background to-muted/10">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">Price Change Alerts</CardTitle>
@@ -870,9 +1023,13 @@ export default function Dashboard() {
                 </CardContent>
               )}
             </Card>
+            </motion.div>
 
             {/* Volume Alerts */}
-            <Card className="border-border/40 bg-gradient-to-b from-background to-muted/10">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">Volume Alerts</CardTitle>
@@ -915,19 +1072,25 @@ export default function Dashboard() {
                 </CardContent>
               )}
             </Card>
+            </motion.div>
           </div>
 
           {/* Right Column - Alerts */}
           <div className="lg:col-span-2">
-            <div className="sticky top-24">
-              <Card className="border-border/40 bg-gradient-to-b from-background to-muted/10">
+            <motion.div
+              variants={dashboardCardVariants}
+            >
+              <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl">Alerts</CardTitle>
-                    <Button size="sm" variant="outline" onClick={() => setViewingMetrics(true)} className="text-xs">
-                      <Eye className="size-3 mr-1" />
+                    <button 
+                      onClick={() => setViewingMetrics(true)} 
+                      className="px-3 py-1 bg-muted rounded-md text-xs flex items-center gap-1 hover:bg-muted/80 transition-colors"
+                    >
+                      <Eye className="size-3" />
                       View Metrics
-                    </Button>
+                    </button>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -938,53 +1101,75 @@ export default function Dashboard() {
                       <p className="text-sm">Create your first alert to get started with memealert notifications.</p>
                     </div>
                   ) : (
-                    alerts.map((alert) => (
-                      <div
-                        key={alert.id}
-                        className="flex items-center justify-between p-4 rounded-lg border border-border/40 bg-muted/20 hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="space-y-3">
+                      <AnimatePresence mode="popLayout">
+                        {alerts.map((alert, index) => {
+                          // Check if this is a newly added alert (less than 1 second old)
+                          const isNewAlert = Date.now() - parseInt(alert.id) < 1000;
+                          
+                          return (
+                            <motion.div
+                              key={alert.id}
+                              layoutId={alert.id}
+                              initial={isNewAlert ? { opacity: 0, x: -20, scale: 0.95 } : false}
+                              animate={{ opacity: 1, x: 0, scale: 1 }}
+                              exit={{ 
+                                opacity: 0, 
+                                x: 20, 
+                                scale: 0.8,
+                                transition: { duration: 0.3, ease: "easeInOut" }
+                              }}
+                              transition={{
+                                type: "spring",
+                                stiffness: 300,
+                                damping: 25,
+                                duration: 0.4
+                              }}
+                              layout
+                              className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-muted/20 backdrop-blur transition-colors duration-200 hover:bg-muted/30"
+                            >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
                           {/* Status Badge */}
-                          <Badge variant={alert.notificationsEnabled ? "default" : "secondary"} className="shrink-0">
+                          <div className={`px-2 py-1 rounded text-xs flex items-center gap-1 ${
+                            alert.notificationsEnabled 
+                              ? "bg-primary text-primary-foreground" 
+                              : "bg-muted text-muted-foreground"
+                          }`}>
                             {alert.notificationsEnabled ? (
-                              <CheckCircle className="size-3 mr-1" />
+                              <CheckCircle className="size-3" />
                             ) : (
-                              <XCircle className="size-3 mr-1" />
+                              <XCircle className="size-3" />
                             )}
                             {alert.notificationsEnabled ? "active" : "inactive"}
-                          </Badge>
+                          </div>
 
                           {/* Token Info */}
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 mb-2">
-                              <span className="font-semibold text-base">{alert.ticker}</span>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-semibold">{alert.ticker}</span>
                               <button
                                 onClick={() => copyToClipboard(alert.contractAddress)}
-                                className="text-sm text-muted-foreground hover:text-foreground font-mono truncate max-w-32 flex items-center gap-1"
+                                className="text-xs text-muted-foreground hover:text-foreground font-mono"
                                 title={alert.contractAddress}
                               >
-                                {alert.contractAddress.slice(0, 8)}...{alert.contractAddress.slice(-6)}
-                                <Copy className="size-3" />
+                                {alert.contractAddress.slice(0, 8)}...{alert.contractAddress.slice(-4)}
                               </button>
                             </div>
 
                             {/* Metrics */}
-                            <div className="grid grid-cols-3 gap-3 text-sm">
+                            <div className="grid grid-cols-3 gap-2 text-xs">
                               <div>
-                                <div className="text-muted-foreground text-xs mb-1">Market Cap</div>
+                                <div className="text-muted-foreground">Market Cap</div>
                                 <div className="font-medium">{formatNumber(alert.marketCap)}</div>
                               </div>
                               <div>
-                                <div className="text-muted-foreground text-xs mb-1">24h Change</div>
-                                <div
-                                  className={`font-medium ${alert.change24h >= 0 ? "text-green-500" : "text-red-500"}`}
-                                >
-                                  {alert.change24h >= 0 ? "+" : ""}
-                                  {alert.change24h}%
+                                <div className="text-muted-foreground">24h Change</div>
+                                <div className={`font-medium ${alert.change24h >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                  {alert.change24h >= 0 ? "+" : ""}{alert.change24h}%
                                 </div>
                               </div>
                               <div>
-                                <div className="text-muted-foreground text-xs mb-1">24h Volume</div>
+                                <div className="text-muted-foreground">24h Volume</div>
                                 <div className="font-medium">{formatNumber(alert.volume24h)}</div>
                               </div>
                             </div>
@@ -992,126 +1177,153 @@ export default function Dashboard() {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className={`size-9 p-0 transition-colors ${
-                              alert.notificationsEnabled 
-                                ? "text-primary hover:text-primary/80" 
-                                : "text-muted-foreground hover:text-foreground"
-                            }`}
-                            onClick={() => toggleNotifications(alert.id)}
-                            title={alert.notificationsEnabled ? "Click to disable notifications" : "Click to enable notifications"}
-                          >
+                        <div className="flex items-center gap-1">
+                          <div title={alert.notificationsEnabled ? "Click to disable notifications" : "Click to enable notifications"}>
                             <Bell 
-                              className={`size-4 transition-all ${
+                              className={`size-4 cursor-pointer transition-colors ${
                                 alert.notificationsEnabled 
-                                  ? "fill-current text-primary" 
+                                  ? "text-primary fill-current" 
                                   : "text-muted-foreground"
-                              }`} 
+                              }`}
+                              onClick={() => toggleNotifications(alert.id)}
                             />
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="size-9 p-0"
-                            onClick={() => editAlert(alert)}
-                            title="Edit alert settings"
-                          >
-                            <Edit className="size-4" />
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="size-9 p-0 text-red-500 hover:text-red-600"
-                            onClick={() => deleteAlert(alert.id)}
-                            title="Delete alert"
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
+                          </div>
+                          <div title="Edit alert settings">
+                            <Edit 
+                              className="size-4 text-muted-foreground cursor-pointer hover:text-foreground transition-colors" 
+                              onClick={() => editAlert(alert)}
+                            />
+                          </div>
+                          <div title="Delete alert">
+                            <Trash2 
+                              className="size-4 text-red-500 cursor-pointer hover:text-red-600 transition-colors" 
+                              onClick={() => deleteAlert(alert.id)}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ))
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
                   )}
                 </CardContent>
               </Card>
-            </div>
+            </motion.div>
           </div>
-        </div>
+        </motion.div>
         )}
 
 
 
-        {/* Phone Verification Required Popup */}
-        {showVerificationPopup && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Phone className="size-5 text-amber-500" />
-                  Phone Verification Required
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  You must verify your phone number before you can access these features.
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-3">
-                  <Button 
-                    onClick={() => {
-                      setShowVerificationPopup(false);
-                      setShowSettings(true);
-                    }}
-                    className="flex-1"
-                  >
-                    Go to Settings
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowVerificationPopup(false)}
-                    className="flex-1"
-                  >
-                    Close
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
 
+
+        <AnimatePresence>
         {showSettings && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-background border rounded-lg p-6 max-w-md w-full mx-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Settings</h3>
-                <Button variant="ghost" size="sm" onClick={() => setShowSettings(false)}>
+          <motion.div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+            <motion.div 
+              className="bg-gradient-to-b from-background to-muted/10 border border-border/40 rounded-xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl backdrop-blur-md"
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  <div className="size-10 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground shadow-lg">
+                    <Settings className="size-5" />
+                  </div>
+                  <h3 className="text-2xl font-bold">Settings</h3>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowSettings(false)}
+                  className="rounded-full size-10 hover:bg-muted/50 transition-all duration-200 hover:scale-105"
+                >
                   <X className="size-4" />
                 </Button>
               </div>
 
-              <div className="space-y-4">
-                <div className="p-4 rounded-lg border">
+              <div className="space-y-8">
+                {/* Phone Verification Section */}
+                <div className="rounded-xl border border-border/40 bg-gradient-to-br from-background to-muted/20 backdrop-blur-sm shadow-lg overflow-hidden">
                   <PhoneVerification />
+                  
+                  <div className="p-6 pt-0">
+                    <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20">
+                      <div className="flex items-start gap-3">
+                        <div className="size-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <Bell className="size-3 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium mb-1">Why verify your phone?</p>
+                          <p className="text-sm text-muted-foreground">
+                            Phone verification enables SMS alerts and voice call notifications for your token alerts. 
+                            You'll receive real-time notifications even when you're away from your computer.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-4 rounded-lg border">
-                  <h4 className="font-medium mb-2">Wallet</h4>
-                  <div className="text-sm text-muted-foreground">
-                    Connected:{" "}
-                    {walletAddress ? `${walletAddress.slice(0, 8)}...${walletAddress.slice(-8)}` : "Not connected"}
+                {/* Wallet Info Section */}
+                <div className="p-6 rounded-xl border border-border/40 bg-gradient-to-br from-background to-muted/20 backdrop-blur-sm shadow-lg">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="size-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white shadow-md">
+                      <Wallet className="size-4" />
+                    </div>
+                    <h4 className="text-xl font-semibold">Connected Wallet</h4>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {walletAddress ? (
+                      <>
+                        <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20">
+                          <Label className="text-sm font-medium text-muted-foreground mb-2 block">Wallet Address</Label>
+                          <div className="font-mono bg-background/50 p-3 rounded-md text-sm break-all border border-border/20">
+                            {walletAddress}
+                          </div>
+                        </div>
+                        <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20">
+                          <Label className="text-sm font-medium text-muted-foreground mb-2 block">User ID</Label>
+                          <div className="font-mono text-sm text-foreground">
+                            {userId || 'Loading...'}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="p-4 bg-muted/40 backdrop-blur-sm rounded-lg border border-border/20 text-center">
+                        <p className="text-muted-foreground">No wallet connected</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
+        <AnimatePresence>
         {editingAlert && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <motion.div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+                          <motion.div variants={modalVariants} initial="hidden" animate="visible" exit="exit">
+              <Card className="w-full max-w-6xl max-h-[90vh] overflow-y-auto border border-border/40 bg-gradient-to-b from-background to-muted/10 shadow-2xl backdrop-blur">
               <CardHeader>
                 <CardTitle>Edit Alert: {editingAlert.ticker}</CardTitle>
               </CardHeader>
@@ -1119,13 +1331,16 @@ export default function Dashboard() {
                 {/* Notification Channels Section */}
                 <div className="space-y-4">
                   <Label className="text-base font-semibold">Notification Channels</Label>
-                  <div className="grid grid-cols-1 gap-3">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div className="flex items-center justify-between p-3 rounded-lg border">
                       <div className="flex items-center gap-2">
                         <Smartphone className="size-4 text-primary" />
                         <span className="text-sm">Push Notifications</span>
                       </div>
-                      <Switch checked={pushEnabled} onCheckedChange={(enabled) => handleNotificationSettingChange('push', enabled)} />
+                      <Switch 
+                        checked={editingAlertChannels?.pushEnabled || false} 
+                        onCheckedChange={(enabled) => handleAlertChannelChange('push', enabled)} 
+                      />
                     </div>
                     
                     <div className="p-3 rounded-lg border space-y-2">
@@ -1135,22 +1350,14 @@ export default function Dashboard() {
                           <span className="text-sm">SMS Alerts</span>
                         </div>
                         <Switch 
-                          checked={smsEnabled} 
-                          onCheckedChange={(enabled) => handleNotificationSettingChange('sms', enabled)}
-                          disabled={!contextIsPhoneVerified}
+                          checked={editingAlertChannels?.smsEnabled || false} 
+                          onCheckedChange={(enabled) => handleAlertChannelChange('sms', enabled)}
                         />
                       </div>
-                      {!contextIsPhoneVerified && (
-                        <div className="text-xs text-amber-600 flex items-center gap-1">
-                          <XCircle className="size-3" />
-                          <span>Verify your phone number to enable SMS alerts</span>
-                        </div>
-                      )}
-                      {contextIsPhoneVerified && smsEnabled && (
-                        <div className="text-xs text-green-600 flex items-center gap-1">
-                          <Check className="size-3" />
-                          <span>SMS enabled for {contextPhoneNumber}</span>
-                        </div>
+                      {!phoneVerified && (
+                        <p className="text-xs text-muted-foreground pl-6">
+                          Phone verification required in Settings
+                        </p>
                       )}
                     </div>
 
@@ -1161,22 +1368,14 @@ export default function Dashboard() {
                           <span className="text-sm">Phone Calls</span>
                         </div>
                         <Switch 
-                          checked={callsEnabled} 
-                          onCheckedChange={(enabled) => handleNotificationSettingChange('calls', enabled)}
-                          disabled={!contextIsPhoneVerified}
+                          checked={editingAlertChannels?.callsEnabled || false} 
+                          onCheckedChange={(enabled) => handleAlertChannelChange('calls', enabled)}
                         />
                       </div>
-                      {!contextIsPhoneVerified && (
-                        <div className="text-xs text-amber-600 flex items-center gap-1">
-                          <XCircle className="size-3" />
-                          <span>Verify your phone number to enable phone call alerts</span>
-                        </div>
-                      )}
-                      {contextIsPhoneVerified && callsEnabled && (
-                        <div className="text-xs text-green-600 flex items-center gap-1">
-                          <Check className="size-3" />
-                          <span>Calls enabled for {contextPhoneNumber}</span>
-                        </div>
+                      {!phoneVerified && (
+                        <p className="text-xs text-muted-foreground pl-6">
+                          Phone verification required in Settings
+                        </p>
                       )}
                     </div>
                   </div>
@@ -1184,11 +1383,12 @@ export default function Dashboard() {
 
                 {/* Metrics Configuration Section */}
                 {editingAlertMetrics && (
-                <div className="space-y-4">
-                  <Label className="text-base font-semibold">Alert Metrics</Label>
-
-                  {/* Market Cap Alerts */}
-                  <div className="p-4 rounded-lg border space-y-3">
+                                 <div className="space-y-6">
+                   <Label className="text-base font-semibold">Alert Metrics</Label>
+                   
+                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                     {/* Market Cap Alerts */}
+                     <div className="p-4 rounded-lg border space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Market Cap Alerts</span>
                       <Switch
@@ -1234,8 +1434,8 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Price Change Alerts */}
-                  <div className="p-4 rounded-lg border space-y-3">
+                                       {/* Price Change Alerts */}
+                     <div className="p-4 rounded-lg border space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Price Change Alerts</span>
                       <Switch
@@ -1264,8 +1464,11 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Volume Alerts */}
-                  <div className="p-4 rounded-lg border space-y-3">
+                                     </div>
+                   
+                   {/* Volume Alerts - Full Width */}
+                   <div className="lg:col-span-2">
+                     <div className="p-4 rounded-lg border space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Volume Alerts</span>
                       <Switch
@@ -1313,8 +1516,9 @@ export default function Dashboard() {
                         </div>
                       </div>
                     )}
-                  </div>
-                </div>
+                     </div>
+                   </div>
+                 </div>
                 )}
 
                 <div className="flex gap-2 pt-4">
@@ -1327,81 +1531,126 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
+        <AnimatePresence>
         {viewingMetrics && !editingAlert && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4">
-            <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+          <motion.div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+            <motion.div variants={modalVariants} initial="hidden" animate="visible" exit="exit">
+              <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-border/40 bg-gradient-to-b from-background to-muted/10 shadow-2xl backdrop-blur">
               <CardHeader>
-                <CardTitle>Alert Metrics Overview</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl font-semibold">Alerts</CardTitle>
+                  <div className="px-3 py-1 bg-muted rounded-md text-xs flex items-center gap-1">
+                    <Eye className="size-3" />
+                    View Metrics
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
-                  {alerts.map((alert) => (
-                    <div key={alert.id} className="p-4 rounded-lg border space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Badge variant={alert.status === "active" ? "default" : "secondary"}>{alert.status}</Badge>
-                          <span className="font-semibold text-lg">{alert.ticker}</span>
+                <div className="space-y-3">
+                  <AnimatePresence mode="popLayout">
+                    {alerts.map((alert, index) => (
+                      <motion.div 
+                        key={alert.id} 
+                        layoutId={`metrics-${alert.id}`}
+                        initial={{ opacity: 0, x: -20, scale: 0.95 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ 
+                          opacity: 0, 
+                          x: 20, 
+                          scale: 0.8,
+                          transition: { duration: 0.3, ease: "easeInOut" }
+                        }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 300,
+                          damping: 25,
+                          duration: 0.4
+                        }}
+                        layout
+                        className="flex items-center justify-between p-3 rounded-lg border border-border/40 bg-muted/20 transition-colors duration-200"
+                      >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {/* Status Badge */}
+                        <div className={`px-2 py-1 rounded text-xs flex items-center gap-1 ${
+                          alert.notificationsEnabled 
+                            ? "bg-primary text-primary-foreground" 
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          {alert.notificationsEnabled ? (
+                            <CheckCircle className="size-3" />
+                          ) : (
+                            <XCircle className="size-3" />
+                          )}
+                          {alert.notificationsEnabled ? "active" : "inactive"}
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => editAlert(alert)}>
-                          <Edit className="size-3 mr-1" />
-                          Edit
-                        </Button>
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-semibold">{alert.ticker}</span>
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {alert.contractAddress.slice(0, 8)}...{alert.contractAddress.slice(-4)}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <div className="text-muted-foreground">Market Cap</div>
+                              <div className="font-medium">{formatNumber(alert.marketCap)}</div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">24h Change</div>
+                              <div className={`font-medium ${alert.change24h >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                {alert.change24h >= 0 ? "+" : ""}{alert.change24h}%
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-muted-foreground">24h Volume</div>
+                              <div className="font-medium">{formatNumber(alert.volume24h)}</div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div className="p-3 rounded border">
-                          <div className="font-medium mb-2 flex items-center gap-2">
-                            Market Cap
-                            <Badge
-                              variant={alert.metrics?.marketCapEnabled ? "default" : "secondary"}
-                              className="text-xs"
-                            >
-                              {alert.metrics?.marketCapEnabled ? "ON" : "OFF"}
-                            </Badge>
-                          </div>
-                          {alert.metrics?.marketCapEnabled && (
-                            <div className="text-muted-foreground">
-                              <div>High: ${alert.metrics?.marketCapHigh?.toLocaleString()}</div>
-                              <div>Low: ${alert.metrics?.marketCapLow?.toLocaleString()}</div>
-                            </div>
-                          )}
+                      <div className="flex items-center gap-1">
+                        <Bell className={`size-4 ${
+                          alert.notificationsEnabled 
+                            ? "text-primary fill-current" 
+                            : "text-muted-foreground"
+                        }`} />
+                        <div title="Edit alert settings">
+                          <Edit 
+                            className="size-4 text-muted-foreground cursor-pointer hover:text-foreground transition-colors" 
+                            onClick={() => {
+                              editAlert(alert);
+                              setViewingMetrics(false);
+                            }}
+                          />
                         </div>
-
-                        <div className="p-3 rounded border">
-                          <div className="font-medium mb-2 flex items-center gap-2">
-                            Price Change
-                            <Badge
-                              variant={alert.metrics?.priceChangeEnabled ? "default" : "secondary"}
-                              className="text-xs"
-                            >
-                              {alert.metrics?.priceChangeEnabled ? "ON" : "OFF"}
-                            </Badge>
-                          </div>
-                          {alert.metrics?.priceChangeEnabled && (
-                            <div className="text-muted-foreground">±{alert.metrics?.priceChangeThreshold}%</div>
-                          )}
-                        </div>
-
-                        <div className="p-3 rounded border">
-                          <div className="font-medium mb-2 flex items-center gap-2">
-                            Volume
-                            <Badge variant={alert.metrics?.volumeEnabled ? "default" : "secondary"} className="text-xs">
-                              {alert.metrics?.volumeEnabled ? "ON" : "OFF"}
-                            </Badge>
-                          </div>
-                          {alert.metrics?.volumeEnabled && (
-                            <div className="text-muted-foreground">
-                              <div>${alert.metrics?.volumeThreshold?.toLocaleString()}</div>
-                              <div>{alert.metrics?.volumePeriod}</div>
-                            </div>
-                          )}
+                        <div title="Delete alert">
+                          <Trash2 
+                            className="size-4 text-red-500 cursor-pointer hover:text-red-600 transition-colors" 
+                            onClick={() => {
+                              deleteAlert(alert.id);
+                              if (alerts.length <= 1) {
+                                setViewingMetrics(false);
+                              }
+                            }}
+                          />
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
+                  </AnimatePresence>
                 </div>
 
                 <div className="flex justify-end pt-4">
@@ -1409,18 +1658,106 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Create Alert Button - shown when token is selected and not editing */}
-        {selectedToken && !editingAlert && !viewingMetrics && (
-          <div className="fixed bottom-8 right-8 z-30">
-            <Button onClick={createAlert} size="lg" className="shadow-lg">
-              <Plus className="size-4 mr-2" />
-              Create Alert for {selectedToken.symbol}
-            </Button>
-          </div>
+        <AnimatePresence>
+          {selectedToken && !editingAlert && !viewingMetrics && (
+            <motion.div 
+              className="fixed bottom-8 right-8 z-30"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ 
+                type: "spring", 
+                stiffness: 300, 
+                damping: 25 
+              }}
+            >
+              <Button onClick={createAlert} size="lg" className="shadow-lg">
+                <Plus className="size-4 mr-2" />
+                Create Alert for {selectedToken.symbol}
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Phone Verification Prompt Dialog */}
+        <AnimatePresence>
+        {showVerificationPrompt && (
+          <motion.div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+          >
+            <motion.div 
+              className="bg-gradient-to-b from-background to-muted/10 border border-border/40 rounded-xl p-8 max-w-md w-full shadow-2xl backdrop-blur-md"
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
+              {/* Header */}
+              <div className="text-center mb-8">
+                <div className="size-16 rounded-full bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-white shadow-lg mx-auto mb-4">
+                  <Phone className="size-8" />
+                </div>
+                <h3 className="text-2xl font-bold mb-2">Phone Verification Required</h3>
+                <p className="text-muted-foreground">
+                  To enable {pendingNotificationType?.toUpperCase()} notifications, you need to verify your phone number first.
+                </p>
+              </div>
+              
+              {/* Content */}
+              <div className="space-y-6">
+                <div className="p-4 bg-muted/30 backdrop-blur-sm rounded-lg border border-border/20">
+                  <div className="flex items-start gap-3">
+                    <div className="size-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <Bell className="size-3 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-1">Enhanced Notifications</p>
+                      <p className="text-sm text-muted-foreground">
+                        Get real-time SMS and call alerts even when you're away from your computer.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="text-center">
+                  <p className="text-base font-medium mb-4">
+                    Would you like to verify your phone number now?
+                  </p>
+                  
+                  <div className="flex flex-col gap-3">
+                    <Button 
+                      onClick={() => handleVerificationPromptResponse(true)}
+                      className="w-full h-12 rounded-lg text-base font-medium"
+                    >
+                      Verify Phone
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => handleVerificationPromptResponse(false)}
+                      className="w-full h-12 rounded-lg bg-background/50 hover:bg-background/80 border-border/40 transition-all duration-200"
+                    >
+                      Not Now
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
+        </AnimatePresence>
+          </div>
+          <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-black/10 dark:ring-white/10 pointer-events-none"></div>
+        </div>
       </main>
     </div>
   )

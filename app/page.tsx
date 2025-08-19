@@ -26,6 +26,10 @@ import {
   Edit,
   Trash2,
   XCircle,
+  Home as HomeIcon,
+  Grid3X3,
+  HelpCircle,
+  Workflow,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
@@ -118,48 +122,51 @@ export default function Home() {
   return (
     <div className="flex min-h-[100dvh] flex-col">
       <header
-        className={`sticky top-0 z-50 w-full backdrop-blur-lg transition-all duration-300 ${isScrolled ? "bg-background/80 shadow-sm" : "bg-transparent"}`}
+        className={`sticky top-0 z-50 w-full backdrop-blur-md transition-all duration-300 ${isScrolled ? "bg-background/95 border-b border-border/40 shadow-lg" : "bg-background/80"}`}
       >
-        <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-2 font-bold">
-            <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground">
+        <div className="container flex h-16 items-center justify-center relative">
+          {/* Logo - positioned on the left */}
+          <div className="absolute left-0 flex items-center gap-2 font-bold">
+            <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground shadow-lg">
               M
             </div>
-            <span>{"Memealert"}</span>
+            <span className="text-lg font-semibold">{"Memealert"}</span>
           </div>
-          {/* Temporary debug info */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="text-xs text-muted-foreground">
-              Supabase: {process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅' : '❌'}
-            </div>
-          )}
-          <nav className="hidden md:flex gap-8">
+          
+          {/* Centered Navigation */}
+          <nav className="hidden md:flex items-center gap-8 bg-muted/30 backdrop-blur-sm rounded-full px-6 py-2 border border-border/40">
             <Link
               href="/dashboard"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="text-sm font-medium text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 px-3 py-1 rounded-full hover:bg-background/50 flex items-center gap-2"
             >
+              <HomeIcon className="size-4" />
               Dashboard
             </Link>
             <Link
               href="#features"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="text-sm font-medium text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 px-3 py-1 rounded-full hover:bg-background/50 flex items-center gap-2"
             >
+              <Grid3X3 className="size-4" />
               Features
             </Link>
             <Link
               href="#how-it-works"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="text-sm font-medium text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 px-3 py-1 rounded-full hover:bg-background/50 flex items-center gap-2"
             >
+              <Workflow className="size-4" />
               How It Works
             </Link>
             <Link
               href="#faq"
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="text-sm font-medium text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 px-3 py-1 rounded-full hover:bg-background/50 flex items-center gap-2"
             >
+              <HelpCircle className="size-4" />
               FAQ
             </Link>
           </nav>
-          <div className="hidden md:flex gap-4 items-center">
+          
+          {/* Wallet Connect - positioned on the right */}
+          <div className="absolute right-0 hidden md:flex gap-4 items-center">
             <WalletConnectButton />
           </div>
           <div className="flex items-center gap-4 md:hidden">
@@ -178,16 +185,20 @@ export default function Home() {
             className="md:hidden absolute top-16 inset-x-0 bg-background/95 backdrop-blur-lg border-b"
           >
             <div className="container py-4 flex flex-col gap-4">
-              <Link href="/dashboard" className="py-2 text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>
+              <Link href="/dashboard" className="py-2 text-sm font-medium flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+                <HomeIcon className="size-4" />
                 Dashboard
               </Link>
-              <Link href="#features" className="py-2 text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>
+              <Link href="#features" className="py-2 text-sm font-medium flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+                <Grid3X3 className="size-4" />
                 Features
               </Link>
-              <Link href="#how-it-works" className="py-2 text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>
+              <Link href="#how-it-works" className="py-2 text-sm font-medium flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+                <Workflow className="size-4" />
                 How It Works
               </Link>
-              <Link href="#faq" className="py-2 text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>
+              <Link href="#faq" className="py-2 text-sm font-medium flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
+                <HelpCircle className="size-4" />
                 FAQ
               </Link>
               <div className="flex flex-col gap-2 pt-2 border-t">
