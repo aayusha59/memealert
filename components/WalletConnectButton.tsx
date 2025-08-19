@@ -5,6 +5,8 @@ import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { useWallet as useCustomWallet } from '@/contexts/WalletContext'
 import { createUserIfNotExists } from '@/lib/supabase'
+import { ArrowRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export function WalletConnectButton() {
   const { publicKey, connected, disconnect } = useWallet()
@@ -69,8 +71,26 @@ export function WalletConnectButton() {
           </button>
         </div>
       ) : (
-        <div data-wallet-connect-button>
-          <WalletMultiButton className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700" />
+        <div className="relative">
+          {/* Hidden WalletMultiButton for functionality */}
+          <div className="absolute opacity-0 pointer-events-none">
+            <WalletMultiButton />
+          </div>
+          {/* Custom styled button */}
+          <Button 
+            size="default" 
+            className="rounded-full h-10 px-6 text-sm"
+            onClick={() => {
+              // Trigger the hidden WalletMultiButton
+              const walletButton = document.querySelector('[data-testid="wallet-adapter-button"]') as HTMLElement;
+              if (walletButton) {
+                walletButton.click();
+              }
+            }}
+            data-wallet-connect-button
+          >
+            Connect
+          </Button>
         </div>
       )}
     </div>
