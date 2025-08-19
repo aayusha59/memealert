@@ -225,88 +225,7 @@ export async function getUserAlerts(userId: string) {
   return alerts
 }
 
-// Helper function to save phone verification data
-export async function savePhoneVerification(userId: string, phoneNumber: string, isVerified: boolean = false) {
-  console.log('📱 savePhoneVerification called with:', { userId, phoneNumber, isVerified })
-  
-  try {
-    // First, clean up any existing duplicates for this user
-    await cleanupDuplicatePhoneVerifications(userId)
-    
-    // Check if phone verification already exists for this user
-    const { data: existingVerification, error: selectError } = await supabase
-      .from('phone_verifications')
-      .select('id')
-      .eq('user_id', userId)
-      .single()
 
-    if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error('❌ Error checking existing phone verification:', selectError)
-      throw selectError
-    }
-
-    if (existingVerification) {
-      // Update existing verification
-      const { data, error: updateError } = await supabase
-        .from('phone_verifications')
-        .update({
-          phone_number: phoneNumber,
-          is_verified: isVerified,
-          verified_at: isVerified ? new Date().toISOString() : undefined
-        })
-        .eq('user_id', userId)
-        .select('*')
-        .single()
-
-      if (updateError) {
-        console.error('❌ Error updating existing phone verification:', updateError)
-        throw updateError
-      }
-
-      console.log('✅ Existing phone verification updated successfully for user:', userId)
-      return data
-    } else {
-      // Insert new verification
-      const { data, error: insertError } = await supabase
-        .from('phone_verifications')
-        .insert({
-          user_id: userId,
-          phone_number: phoneNumber,
-          is_verified: isVerified,
-          verified_at: isVerified ? new Date().toISOString() : undefined
-        })
-        .select('*')
-        .single()
-
-      if (insertError) {
-        console.error('❌ Error inserting new phone verification:', insertError)
-        throw insertError
-      }
-
-      console.log('✅ New phone verification inserted successfully for user:', userId)
-      return data
-    }
-  } catch (error) {
-    console.error('❌ Error in savePhoneVerification:', error)
-    throw error
-  }
-}
-
-// Helper function to get phone verification status
-export async function getPhoneVerification(userId: string) {
-  const { data, error } = await supabase
-    .from('phone_verifications')
-    .select('*')
-    .eq('user_id', userId)
-    .single()
-
-  if (error && error.code !== 'PGSQL_ERROR_NO_ROWS') {
-    console.error('Error fetching phone verification:', error)
-    return null
-  }
-
-  return data
-}
 
 // Helper function to save notification settings
 export async function saveNotificationSettings(userId: string, settings: any) {
@@ -619,49 +538,7 @@ export async function cleanupDuplicateNotificationSettings(userId: string) {
   }
 }
 
-// Helper function to clean up duplicate phone verifications for a specific user
-export async function cleanupDuplicatePhoneVerifications(userId: string) {
-  console.log('🧹 Cleaning up duplicate phone verifications for user:', userId)
-  
-  try {
-    // Get all phone verifications for this user
-    const { data: allVerifications, error: selectError } = await supabase
-      .from('phone_verifications')
-      .select('id')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
 
-    if (selectError) {
-      console.error('❌ Error selecting phone verifications for cleanup:', selectError)
-      throw selectError
-    }
-
-    // If there's more than one verification, delete all but the first (oldest)
-    if (allVerifications && allVerifications.length > 1) {
-      const verificationsToDelete = allVerifications.slice(1) // Keep first, delete the rest
-      const idsToDelete = verificationsToDelete.map(v => v.id)
-      
-      const { error: deleteError } = await supabase
-        .from('phone_verifications')
-        .delete()
-        .in('id', idsToDelete)
-
-      if (deleteError) {
-        console.error('❌ Error deleting duplicate phone verifications:', deleteError)
-        throw deleteError
-      }
-
-      console.log('✅ Deleted', verificationsToDelete.length, 'duplicate phone verifications for user:', userId)
-    } else {
-      console.log('ℹ️ No duplicates found for user:', userId)
-    }
-
-    return true
-  } catch (error) {
-    console.error('❌ Error in cleanupDuplicatePhoneVerifications:', error)
-    throw error
-  }
-}
 
 // Helper function to update alert notification status
 export async function updateAlertNotificationStatus(alertId: string, notificationsEnabled: boolean) {
@@ -683,5 +560,53 @@ export async function updateAlertNotificationStatus(alertId: string, notificatio
   } catch (error) {
     console.error('❌ Error in updateAlertNotificationStatus:', error)
     throw error
+  }
+}
+
+// Helper function to update user's phone number after verification
+export async function updateUserPhoneNumber(userId: string, phoneNumber: string) {
+  console.log('📱 updateUserPhoneNumber called with:', { userId, phoneNumber })
+  
+  try {
+    const { error } = await supabase
+      .from('users')
+      .update({ 
+        phone_number: phoneNumber,
+        phone_verified: true,
+        phone_verified_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+    
+    if (error) {
+      console.error('❌ Error updating user phone number:', error)
+      throw error
+    }
+
+    console.log('✅ User phone number updated successfully:', userId, phoneNumber)
+    return true
+  } catch (error) {
+    console.error('❌ Error in updateUserPhoneNumber:', error)
+    throw error
+  }
+}
+
+// Helper function to get user's phone verification status
+export async function getUserPhoneStatus(userId: string) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('phone_number, phone_verified, phone_verified_at')
+    .eq('id', userId)
+    .single()
+
+  if (error) {
+    console.error('Error fetching user phone status:', error)
+    return null
+  }
+
+  return {
+    phoneNumber: data.phone_number,
+    phoneVerified: data.phone_verified,
+    phoneVerifiedAt: data.phone_verified_at
   }
 }

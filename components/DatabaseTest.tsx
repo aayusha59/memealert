@@ -41,15 +41,18 @@ export function DatabaseTest() {
       const testWallet = 'test_wallet_' + Date.now()
       const { data, error } = await supabase
         .from('users')
-        .insert([{ wallet_address: testWallet }])
-        .select('id')
+        .insert([{ 
+          wallet_address: testWallet,
+          phone_verified: false  // Explicitly set default values for new phone fields
+        }])
+        .select('id, wallet_address, phone_verified')
         .single()
       
       if (error) {
         setTestResult(`❌ User creation failed: ${error.message}`)
         console.error('User creation error:', error)
       } else {
-        setTestResult(`✅ Test user created with ID: ${data.id}`)
+        setTestResult(`✅ Test user created with ID: ${data.id} (phone_verified: ${data.phone_verified})`)
         console.log('User creation result:', data)
       }
     } catch (err) {
@@ -69,7 +72,10 @@ export function DatabaseTest() {
       const testWallet = 'test_wallet_' + Date.now()
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .insert([{ wallet_address: testWallet }])
+        .insert([{ 
+          wallet_address: testWallet,
+          phone_verified: false
+        }])
         .select('id')
         .single()
       
@@ -123,10 +129,7 @@ export function DatabaseTest() {
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000')
         
-      const { error: phoneError } = await supabase
-        .from('phone_verifications')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000')
+
         
       const { error: metricsError } = await supabase
         .from('alert_metrics')
@@ -143,9 +146,9 @@ export function DatabaseTest() {
         .delete()
         .neq('id', '00000000-0000-0000-0000-000000000000')
 
-      if (historyError || settingsError || phoneError || metricsError || alertsError || usersError) {
+      if (historyError || settingsError || metricsError || alertsError || usersError) {
         setTestResult('❌ Some tables failed to clear. Check console for details.')
-        console.error('Clear errors:', { historyError, settingsError, phoneError, metricsError, alertsError, usersError })
+        console.error('Clear errors:', { historyError, settingsError, metricsError, alertsError, usersError })
       } else {
         setTestResult('✅ All data cleared successfully!')
       }

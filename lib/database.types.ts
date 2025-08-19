@@ -13,69 +13,33 @@ export interface Database {
         Row: {
           id: string
           wallet_address: string
+          phone_number?: string
+          phone_verified: boolean
+          phone_verified_at?: string
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           wallet_address: string
+          phone_number?: string
+          phone_verified?: boolean
+          phone_verified_at?: string
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           wallet_address?: string
+          phone_number?: string
+          phone_verified?: boolean
+          phone_verified_at?: string
           created_at?: string
           updated_at?: string
         }
         Relationships: []
       }
-      phone_verifications: {
-        Row: {
-          id: string
-          user_id: string
-          phone_number: string
-          is_verified: boolean
-          verification_code?: string
-          verification_attempts: number
-          last_verification_attempt?: string
-          verified_at?: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          phone_number: string
-          is_verified?: boolean
-          verification_code?: string
-          verification_attempts?: number
-          last_verification_attempt?: string
-          verified_at?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          phone_number?: string
-          is_verified?: boolean
-          verification_code?: string
-          verification_attempts?: number
-          last_verification_attempt?: string
-          verified_at?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "phone_verifications_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
+
       alerts: {
         Row: {
           id: string
