@@ -653,65 +653,119 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full backdrop-blur-md transition-all duration-300 bg-background/95 border-b border-border/40 shadow-lg">
-        <div className="container flex h-16 items-center justify-center relative">
-          {/* Left Section - Logo and Title */}
-          <div className="absolute left-0 flex items-center gap-2">
-            <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground font-bold shadow-lg">
-              M
-            </div>
-            <h1 className="text-xl font-bold">Memealert Dashboard</h1>
-          </div>
-          
-          {/* Centered Navigation Pills */}
-          <nav className="hidden md:flex items-center gap-2 bg-muted/30 backdrop-blur-sm rounded-full px-4 py-2 border border-border/40">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => (window.location.href = "/")}
-              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
+      <header
+        className="fixed top-0 z-50 w-full transition-all duration-500 bg-background/80 backdrop-blur-xl border-b border-border/30 shadow-2xl shadow-primary/5"
+      >
+        {/* Main Navigation Container */}
+        <div className="container mx-auto px-4 md:px-6">
+          <div className="flex h-20 items-center justify-between">
+            
+            {/* Enhanced Logo */}
+            <motion.div 
+              className="flex items-center gap-3"
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.2 }}
             >
-              <Home className="size-4" />
-              Home
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
-            >
-              <Settings className="size-4" />
-              Settings
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => refreshUserData()} 
-              disabled={isLoading}
-              className="flex items-center gap-2 rounded-full hover:bg-background/50 transition-all duration-200 hover:scale-105"
-            >
-              <RefreshCw className="size-4" />
-              Refresh
-            </Button>
-          </nav>
-          
-          {/* Right Section - Wallet Connection */}
-          <div className="absolute right-0 flex items-center gap-2">
-            {isWalletConnected ? (
-              <Button variant="outline" className="flex items-center gap-2 rounded-full bg-muted/30 backdrop-blur-sm border-border/40 hover:bg-background/50 transition-all duration-200">
-                <Wallet className="size-4" />
-                {walletAddress ? `${walletAddress!.substring(0, 4)}...${walletAddress!.substring(Math.max(0, walletAddress!.length - 4))}` : 'Connected'}
-              </Button>
-            ) : (
-              <div data-wallet-button className="flex justify-center">
-                <WalletConnectButton />
+              <div className="relative group">
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary to-primary/70 blur-sm opacity-0 transition-opacity duration-300 group-hover:opacity-50"></div>
+                <div className="relative size-10 rounded-xl bg-gradient-to-br from-primary via-primary/90 to-primary/70 flex items-center justify-center text-primary-foreground shadow-lg border border-primary/20">
+                  <span className="text-lg font-bold">M</span>
+                </div>
               </div>
-            )}
+              <div className="flex flex-col">
+                <span className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                  Memealert
+                </span>
+                <span className="text-xs text-muted-foreground -mt-1">Dashboard</span>
+              </div>
+            </motion.div>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden lg:flex items-center">
+              <div className="relative rounded-2xl border border-border/30 bg-background/40 backdrop-blur-xl p-2 shadow-xl shadow-black/5">
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-background/60 to-muted/20"></div>
+                <div className="relative flex items-center gap-2">
+                  {[
+                    { 
+                      onClick: () => (window.location.href = "/"), 
+                      label: "Home", 
+                      icon: Home 
+                    },
+                    { 
+                      onClick: () => setShowSettings(true), 
+                      label: "Settings", 
+                      icon: Settings 
+                    },
+                    { 
+                      onClick: () => refreshUserData(), 
+                      label: "Refresh", 
+                      icon: RefreshCw,
+                      disabled: isLoading
+                    },
+                  ].map((item, index) => (
+                    <button
+                      key={index}
+                      onClick={item.onClick}
+                      disabled={item.disabled}
+                      className="group relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-all duration-300 hover:text-foreground rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 opacity-0 transition-all duration-300 group-hover:opacity-100"></div>
+                      <div className="absolute inset-0 rounded-xl border border-primary/20 opacity-0 transition-all duration-300 group-hover:opacity-100"></div>
+                      <item.icon className="relative size-4 transition-transform duration-300 group-hover:scale-110" />
+                      <span className="relative">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </nav>
+
+            {/* Desktop Wallet Section */}
+            <div className="hidden lg:flex items-center gap-4">
+              {isWalletConnected ? (
+                <div className="relative group">
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/20 to-primary/10 blur-sm opacity-0 transition-opacity duration-300 group-hover:opacity-100"></div>
+                  <Button variant="outline" className="relative flex items-center gap-2 rounded-xl bg-background/40 backdrop-blur-sm border-border/30 hover:bg-background/60 transition-all duration-300">
+                    <Wallet className="size-4" />
+                    {walletAddress ? `${walletAddress!.substring(0, 4)}...${walletAddress!.substring(Math.max(0, walletAddress!.length - 4))}` : 'Connected'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/20 to-primary/10 blur-sm opacity-0 transition-opacity duration-300 hover:opacity-100"></div>
+                  <WalletConnectButton />
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="flex items-center gap-3 lg:hidden">
+              <div className="lg:hidden">
+                {isWalletConnected ? (
+                  <Button variant="outline" size="sm" className="rounded-xl bg-background/40 backdrop-blur-sm border-border/30">
+                    <Wallet className="size-4" />
+                  </Button>
+                ) : (
+                  <WalletConnectButton />
+                )}
+              </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setShowSettings(true)}
+                className="relative size-10 rounded-xl border border-border/30 bg-background/40 backdrop-blur-sm transition-all duration-300 hover:bg-background/60 hover:border-primary/30"
+              >
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-background/60 to-muted/20"></div>
+                <div className="relative">
+                  <Settings className="size-5" />
+                </div>
+                <span className="sr-only">Settings</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="container py-8 max-w-7xl relative overflow-hidden">
+      <main className="container pt-28 pb-8 max-w-7xl relative overflow-hidden">
         {/* Background with grid pattern */}
         <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-black bg-[linear-gradient(to_right,#f0f0f0_1px,transparent_1px),linear-gradient(to_bottom,#f0f0f0_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1f1f1f_1px,transparent_1px),linear-gradient(to_bottom,#1f1f1f_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]"></div>
         
