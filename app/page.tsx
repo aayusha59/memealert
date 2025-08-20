@@ -30,15 +30,18 @@ import {
   Grid3X3,
   HelpCircle,
   Workflow,
+  Settings,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import FeatureCard from "@/components/ui/FeatureCard"
 import { useTheme } from "next-themes"
 import { WalletConnectButton } from "../components/WalletConnectButton"
 import { useWallet } from "@/contexts/WalletContext"
+import LightRays from "@/components/ui/LightRays"
 
 export default function Home() {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -88,122 +91,169 @@ export default function Home() {
       title: "Wallet-Based Security",
       description:
         "Connect your Solana wallet to securely store alerts on-chain and verify ownership without passwords.",
-      icon: <Zap className="size-5" />,
+      icon: <Zap className="size-6" />,
     },
     {
       title: "Phone Verification",
       description: "Verify your phone number to enable SMS and phone call alerts that keep you connected 24/7.",
-      icon: <BarChart className="size-5" />,
+      icon: <Smartphone className="size-6" />,
     },
     {
       title: "Customizable Alerts",
       description: "Set thresholds for marketcap, volume, and % gain — toggle metrics on or off to fit your strategy.",
-      icon: <Users className="size-5" />,
+      icon: <Bell className="size-6" />,
     },
     {
       title: "Multi-Channel Notifications",
       description: "Choose how you want to be notified: PWA push alerts, SMS, or even a phone call that wakes you up.",
-      icon: <Shield className="size-5" />,
+      icon: <MessageSquare className="size-6" />,
     },
     {
       title: "Real-Time Monitoring",
       description:
         "MemeAlert continuously tracks token data from Solana DEXs and oracles like Pyth, ensuring accurate and instant alerts.",
-      icon: <Layers className="size-5" />,
+      icon: <BarChart className="size-6" />,
     },
     {
       title: "Simple Dashboard",
       description:
         "Manage, edit, or delete your alerts anytime from a clean, intuitive dashboard with full alert history.",
-      icon: <Star className="size-5" />,
+      icon: <Star className="size-6" />,
     },
   ]
 
   return (
     <div className="flex min-h-[100dvh] flex-col">
       <header
-        className={`sticky top-0 z-50 w-full backdrop-blur-md transition-all duration-300 ${isScrolled ? "bg-background/95 border-b border-border/40 shadow-lg" : "bg-background/80"}`}
+        className={`fixed top-0 z-50 w-full transition-all duration-500 ${
+          isScrolled 
+            ? "bg-background/80 backdrop-blur-xl border-b border-border/30 shadow-2xl shadow-primary/5" 
+            : "bg-transparent"
+        }`}
       >
-        <div className="container flex h-16 items-center justify-center relative">
-          {/* Logo - positioned on the left */}
-          <div className="absolute left-0 flex items-center gap-2 font-bold">
-            <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground shadow-lg">
-              M
+        {/* Main Navigation Container */}
+        <div className="container mx-auto px-4 md:px-6">
+          <div className="flex h-20 items-center justify-between">
+            
+            {/* Enhanced Logo */}
+            <motion.div 
+              className="flex items-center gap-3"
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="relative group">
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary to-primary/70 blur-sm opacity-0 transition-opacity duration-300 group-hover:opacity-50"></div>
+                <div className="relative size-10 rounded-xl bg-gradient-to-br from-primary via-primary/90 to-primary/70 flex items-center justify-center text-primary-foreground shadow-lg border border-primary/20">
+                  <span className="text-lg font-bold">M</span>
             </div>
-            <span className="text-lg font-semibold">{"Memealert"}</span>
           </div>
-          
-          {/* Centered Navigation */}
-          <nav className="hidden md:flex items-center gap-8 bg-muted/30 backdrop-blur-sm rounded-full px-6 py-2 border border-border/40">
+              <div className="flex flex-col">
+                <span className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                  Memealert
+                </span>
+                <span className="text-xs text-muted-foreground -mt-1">Never miss a pump or dump</span>
+              </div>
+            </motion.div>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden lg:flex items-center">
+              <div className="relative rounded-2xl border border-border/30 bg-background/40 backdrop-blur-xl p-2 shadow-xl shadow-black/5">
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-background/60 to-muted/20"></div>
+                <div className="relative flex items-center gap-2">
+                  {[
+                    { href: "/dashboard", label: "Dashboard", icon: HomeIcon },
+                    { href: "#features", label: "Features", icon: Grid3X3 },
+                    { href: "#how-it-works", label: "How It Works", icon: Workflow },
+                    { href: "#faq", label: "FAQ", icon: HelpCircle },
+                  ].map((item) => (
             <Link
-              href="/dashboard"
-              className="text-sm font-medium text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 px-3 py-1 rounded-full hover:bg-background/50 flex items-center gap-2"
-            >
-              <HomeIcon className="size-4" />
-              Dashboard
+                      key={item.href}
+                      href={item.href}
+                      className="group relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-muted-foreground transition-all duration-300 hover:text-foreground rounded-xl"
+                    >
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 opacity-0 transition-all duration-300 group-hover:opacity-100"></div>
+                      <div className="absolute inset-0 rounded-xl border border-primary/20 opacity-0 transition-all duration-300 group-hover:opacity-100"></div>
+                      <item.icon className="relative size-4 transition-transform duration-300 group-hover:scale-110" />
+                      <span className="relative">{item.label}</span>
             </Link>
-            <Link
-              href="#features"
-              className="text-sm font-medium text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 px-3 py-1 rounded-full hover:bg-background/50 flex items-center gap-2"
-            >
-              <Grid3X3 className="size-4" />
-              Features
-            </Link>
-            <Link
-              href="#how-it-works"
-              className="text-sm font-medium text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 px-3 py-1 rounded-full hover:bg-background/50 flex items-center gap-2"
-            >
-              <Workflow className="size-4" />
-              How It Works
-            </Link>
-            <Link
-              href="#faq"
-              className="text-sm font-medium text-muted-foreground transition-all duration-200 hover:text-foreground hover:scale-105 px-3 py-1 rounded-full hover:bg-background/50 flex items-center gap-2"
-            >
-              <HelpCircle className="size-4" />
-              FAQ
-            </Link>
+                  ))}
+                </div>
+              </div>
           </nav>
           
-          {/* Wallet Connect - positioned on the right */}
-          <div className="absolute right-0 hidden md:flex gap-4 items-center">
+            {/* Desktop Wallet Section */}
+            <div className="hidden lg:flex items-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-primary/20 to-primary/10 blur-sm opacity-0 transition-opacity duration-300 hover:opacity-100"></div>
             <WalletConnectButton />
           </div>
-          <div className="flex items-center gap-4 md:hidden">
-            <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            </div>
+
+            {/* Mobile Menu Button */}
+            <div className="flex items-center gap-3 lg:hidden">
+              <div className="lg:hidden">
+                <WalletConnectButton />
+              </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="relative size-10 rounded-xl border border-border/30 bg-background/40 backdrop-blur-sm transition-all duration-300 hover:bg-background/60 hover:border-primary/30"
+              >
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-background/60 to-muted/20"></div>
+                <div className="relative">
               {mobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+                </div>
               <span className="sr-only">Toggle menu</span>
             </Button>
           </div>
         </div>
-        {/* Mobile menu */}
+        </div>
+
+        {/* Enhanced Mobile Menu */}
         {mobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="md:hidden absolute top-16 inset-x-0 bg-background/95 backdrop-blur-lg border-b"
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="lg:hidden absolute top-20 inset-x-0 mx-4"
           >
-            <div className="container py-4 flex flex-col gap-4">
-              <Link href="/dashboard" className="py-2 text-sm font-medium flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
-                <HomeIcon className="size-4" />
-                Dashboard
+            <div className="relative rounded-2xl border border-border/30 bg-background/95 backdrop-blur-xl shadow-2xl overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-background/90 to-muted/20"></div>
+              
+              <div className="relative p-6">
+                <div className="space-y-1">
+                  {[
+                    { href: "/dashboard", label: "Dashboard", icon: HomeIcon },
+                    { href: "#features", label: "Features", icon: Grid3X3 },
+                    { href: "#how-it-works", label: "How It Works", icon: Workflow },
+                    { href: "#faq", label: "FAQ", icon: HelpCircle },
+                  ].map((item, index) => (
+                    <motion.div
+                      key={item.href}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.1 }}
+                    >
+                      <Link 
+                        href={item.href} 
+                        className="group flex items-center gap-3 px-4 py-3 text-base font-medium text-muted-foreground transition-all duration-300 hover:text-foreground rounded-xl hover:bg-primary/5 border border-transparent hover:border-primary/20"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary transition-all duration-300 group-hover:bg-primary/20 group-hover:scale-110">
+                          <item.icon className="size-4" />
+                        </div>
+                        <span>{item.label}</span>
+                        <ChevronRight className="size-4 ml-auto opacity-0 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-1" />
               </Link>
-              <Link href="#features" className="py-2 text-sm font-medium flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
-                <Grid3X3 className="size-4" />
-                Features
-              </Link>
-              <Link href="#how-it-works" className="py-2 text-sm font-medium flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
-                <Workflow className="size-4" />
-                How It Works
-              </Link>
-              <Link href="#faq" className="py-2 text-sm font-medium flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
-                <HelpCircle className="size-4" />
-                FAQ
-              </Link>
-              <div className="flex flex-col gap-2 pt-2 border-t">
-                <WalletConnectButton />
+                    </motion.div>
+                  ))}
               </div>
+              </div>
+              
+              {/* Mobile menu bottom accent */}
+              <div className="h-1 bg-gradient-to-r from-primary/50 via-primary to-primary/50"></div>
             </div>
           </motion.div>
         )}
@@ -213,6 +263,20 @@ export default function Home() {
         <section className="w-full py-20 md:py-32 lg:py-40 overflow-hidden">
           <div className="container px-4 md:px-6 relative py-0">
             <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-black bg-[linear-gradient(to_right,#f0f0f0_1px,transparent_1px),linear-gradient(to_bottom,#f0f0f0_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1f1f1f_1px,transparent_1px),linear-gradient(to_bottom,#1f1f1f_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]"></div>
+            <div className="fixed inset-0 z-[-1] pointer-events-none">
+              <LightRays
+                raysOrigin="top-center"
+                raysColor="#89CFF0"
+                raysSpeed={1.5}
+                lightSpread={1.2}
+                rayLength={2.0}
+                followMouse={true}
+                mouseInfluence={0.1}
+                noiseAmount={0.1}
+                distortion={0.05}
+                className="custom-rays"
+              />
+            </div>
 
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -243,8 +307,7 @@ export default function Home() {
                     }
                   }}
                 >
-                  Add Your First Token
-                  <ArrowRight className="ml-2 size-4" />
+                  Connect
                 </Button>
                 <Button 
                   size="lg" 
@@ -587,15 +650,12 @@ export default function Home() {
             >
               {features.map((feature, i) => (
                 <motion.div key={i} variants={item}>
-                  <Card className="h-full overflow-hidden border-border/40 bg-gradient-to-b from-background to-muted/10 backdrop-blur transition-all hover:shadow-md">
-                    <CardContent className="p-6 flex flex-col h-full">
-                      <div className="size-10 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center text-primary mb-4">
-                        {feature.icon}
-                      </div>
-                      <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
-                      <p className="text-muted-foreground">{feature.description}</p>
-                    </CardContent>
-                  </Card>
+                  <FeatureCard
+                    title={feature.title}
+                    description={feature.description}
+                    icon={feature.icon}
+                    className="h-full"
+                  />
                 </motion.div>
               ))}
             </motion.div>
@@ -623,8 +683,15 @@ export default function Home() {
               </p>
             </motion.div>
 
-            <div className="grid md:grid-cols-3 gap-8 md:gap-12 relative">
+            {/* Process steps container with subtle background */}
+            <div className="relative rounded-2xl border border-border/40 bg-background/40 backdrop-blur-sm p-8 md:p-12">
+              <div className="absolute inset-0 bg-gradient-to-br from-background/60 to-muted/10 rounded-2xl"></div>
+              
+              <div className="relative grid md:grid-cols-3 gap-8 md:gap-12">
+              {/* Enhanced connection line with animated dots */}
               <div className="hidden md:block absolute top-1/2 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-border to-transparent -translate-y-1/2 z-0"></div>
+              <div className="hidden md:block absolute top-1/2 left-1/4 w-2 h-2 rounded-full bg-primary/60 -translate-y-1/2 z-10 animate-pulse"></div>
+              <div className="hidden md:block absolute top-1/2 right-1/4 w-2 h-2 rounded-full bg-primary/60 -translate-y-1/2 z-10 animate-pulse" style={{ animationDelay: '0.5s' }}></div>
 
               {[
                 {
@@ -632,18 +699,21 @@ export default function Home() {
                   title: "Connect Wallet",
                   description:
                     "Securely connect your Solana wallet to verify ownership and enable on-chain alert storage. Then, verify your phone number so you can receive SMS or phone call alerts.",
+                  icon: <Shield className="size-6" />,
                 },
                 {
                   step: "02",
                   title: "Set Alerts",
                   description:
                     "Enter a token address within Solana, choose metrics (marketcap, volume, or % change), and set your custom thresholds.",
+                  icon: <Bell className="size-6" />,
                 },
                 {
                   step: "03",
                   title: "Receive Notifications",
                   description:
                     "Get alerts instantly via PWA push notifications, SMS, or even a phone call that wakes you up when thresholds are hit.",
+                  icon: <Smartphone className="size-6" />,
                 },
               ].map((step, i) => (
                 <motion.div
@@ -652,15 +722,32 @@ export default function Home() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="relative z-10 flex flex-col items-center text-center space-y-4"
+                  className="group relative z-10 flex flex-col items-center text-center space-y-6"
                 >
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-xl font-bold shadow-lg">
+                  {/* Enhanced step circle with background blur */}
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 blur-lg scale-110 opacity-0 transition-opacity duration-300 group-hover:opacity-100"></div>
+                    <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-xl font-bold shadow-lg border border-primary/20 transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-primary/25">
                     {step.step}
                   </div>
-                  <h3 className="text-xl font-bold">{step.title}</h3>
-                  <p className="text-muted-foreground">{step.description}</p>
+                    
+                    {/* Icon overlay */}
+                    <div className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-background border-2 border-primary/20 text-primary transition-all duration-300 group-hover:scale-110">
+                      {step.icon}
+                    </div>
+                  </div>
+
+                  {/* Content with improved spacing */}
+                  <div className="space-y-3 max-w-sm">
+                    <h3 className="text-xl font-bold transition-colors duration-300 group-hover:text-primary">{step.title}</h3>
+                    <p className="text-muted-foreground leading-relaxed transition-colors duration-300 group-hover:text-foreground/80">{step.description}</p>
+                  </div>
+
+                  {/* Subtle bottom accent */}
+                  <div className="w-12 h-0.5 bg-gradient-to-r from-transparent via-primary/30 to-transparent transition-all duration-300 group-hover:via-primary/60 group-hover:w-16"></div>
                 </motion.div>
               ))}
+              </div>
             </div>
           </div>
         </section>
@@ -685,13 +772,39 @@ export default function Home() {
               </p>
             </motion.div>
 
+            {/* FAQ with enhanced transparency */}
             <div className="mx-auto max-w-3xl">
-              <Accordion type="single" collapsible className="w-full">
+              <Accordion type="single" collapsible className="w-full space-y-3">
                 {[
                   {
                     question: "Which Solana tokens can I monitor?",
                     answer:
                       "You can monitor any Solana token that's listed on DexScreener. Simply paste the contract address and we'll start tracking it immediately. We support all major DEXs including Pumpfun, Bonk, Raydium, Orca, and Jupiter.",
+                    icon: <Search className="size-4" />,
+                  },
+                  {
+                    question: "How do phone call alerts work?",
+                    answer:
+                      "When your token hits a threshold, we'll call your verified phone number with a voice message. The call is loud enough to wake you up and includes details about which token triggered the alert and the current price movement.",
+                    icon: <Phone className="size-4" />,
+                  },
+                  {
+                    question: "What metrics can I set alerts for?",
+                    answer:
+                      "You can set alerts for market cap changes, 24h volume thresholds, and percentage price changes (both gains and losses). Each metric can be customized with your own thresholds and can be toggled on or off independently.",
+                    icon: <BarChart className="size-4" />,
+                  },
+                  {
+                    question: "How secure is my wallet connection?",
+                    answer:
+                      "We use read-only wallet connections that never have access to your private keys or funds. Your wallet is only used for identity verification and to store alert preferences on-chain. We cannot perform any transactions on your behalf.",
+                    icon: <Shield className="size-4" />,
+                  },
+                  {
+                    question: "Can I manage multiple tokens?",
+                    answer:
+                      "Yes! You can add unlimited tokens to your dashboard and set different alert thresholds for each one. Each token can have its own notification preferences and can be activated or deactivated independently.",
+                    icon: <Layers className="size-4" />,
                   },
                 ].map((faq, i) => (
                   <motion.div
@@ -701,11 +814,21 @@ export default function Home() {
                     viewport={{ once: true }}
                     transition={{ duration: 0.3, delay: i * 0.05 }}
                   >
-                    <AccordionItem value={`item-${i}`} className="border-b border-border/40 py-2">
-                      <AccordionTrigger className="text-left font-medium hover:no-underline">
-                        {faq.question}
+                    <AccordionItem 
+                      value={`item-${i}`} 
+                      className="group border-b border-border/30 px-0 py-3 transition-all duration-300 hover:border-primary/40"
+                    >
+                      <AccordionTrigger className="text-left font-medium hover:no-underline py-2 transition-colors duration-300 group-hover:text-primary [&[data-state=open]]:text-primary">
+                        <div className="flex items-center gap-3">
+                          <div className="size-6 rounded-full bg-primary/10 backdrop-blur-sm border border-primary/20 flex items-center justify-center text-primary transition-all duration-300 group-hover:bg-primary/20 group-hover:border-primary/30 group-hover:scale-110">
+                            {faq.icon}
+                          </div>
+                          <span className="flex-1">{faq.question}</span>
+                        </div>
                       </AccordionTrigger>
-                      <AccordionContent className="text-muted-foreground">{faq.answer}</AccordionContent>
+                      <AccordionContent className="text-muted-foreground leading-relaxed pt-2 pb-4 ml-9 transition-colors duration-300 group-hover:text-foreground/90">
+                        {faq.answer}
+                      </AccordionContent>
                     </AccordionItem>
                   </motion.div>
                 ))}
@@ -719,23 +842,38 @@ export default function Home() {
           <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-black bg-[linear-gradient(to_right,#f0f0f0_1px,transparent_1px),linear-gradient(to_bottom,#f0f0f0_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1f1f1f_1px,transparent_1px),linear-gradient(to_bottom,#1f1f1f_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_50%,#000_40%,transparent_100%)]"></div>
 
           <div className="container px-4 md:px-6 relative">
+            {/* Enhanced CTA Container */}
+            <div className="relative mx-auto max-w-4xl">
+              <div className="relative rounded-3xl border border-border/40 bg-background/40 backdrop-blur-sm p-8 md:p-16 overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-background/80 to-muted/20"></div>
+                
+                {/* Decorative elements */}
+                <div className="absolute top-4 right-4 size-20 rounded-full bg-primary/10 blur-2xl"></div>
+                <div className="absolute bottom-4 left-4 size-16 rounded-full bg-primary/5 blur-xl"></div>
+                
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="flex flex-col items-center justify-center space-y-6 text-center"
+                  className="relative flex flex-col items-center justify-center space-y-8 text-center"
             >
-              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight">
+                  {/* Title with enhanced styling */}
+                  <div className="space-y-4">
+                    <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
                 Sleep Soundly, Trade Smartly
               </h2>
-              <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl">
+                    <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl leading-relaxed">
                 Join thousands of traders who never miss a pump or dump. Get woken up by loud alerts the moment your
                 memecoins move.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4 mt-4">
+                  </div>
+
+                  {/* Enhanced button with glow effect */}
+                  <div className="relative group">
+                    <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-primary to-primary/70 blur opacity-0 transition-opacity duration-300 group-hover:opacity-25"></div>
                 <Button 
                   size="lg" 
-                  className="rounded-full h-12 px-8 text-base"
+                      className="relative rounded-full h-14 px-10 text-lg font-semibold shadow-lg transition-all duration-300 hover:shadow-xl hover:shadow-primary/25 hover:scale-105"
                   onClick={() => {
                     if (isWalletConnected) {
                       window.location.href = "/dashboard";
@@ -745,98 +883,68 @@ export default function Home() {
                     }
                   }}
                 >
-                  Add Your First Token
-                  <ArrowRight className="ml-2 size-4" />
+                      Connect
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground mt-4">Connect your wallet to get started</p>
+
+                  {/* Simplified subtitle */}
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">Connect your wallet to get started</p>
+                  </div>
             </motion.div>
+              </div>
+              
+              {/* Subtle glow effects */}
+              <div className="absolute -bottom-8 -right-8 -z-10 h-32 w-32 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 blur-3xl opacity-60"></div>
+              <div className="absolute -top-8 -left-8 -z-10 h-24 w-24 rounded-full bg-gradient-to-br from-secondary/20 to-primary/20 blur-2xl opacity-60"></div>
+            </div>
           </div>
         </section>
       </main>
 
-      <footer className="w-full border-t bg-background/95 backdrop-blur-sm">
-        <div className="container flex flex-col gap-8 px-4 py-10 md:px-6 lg:py-16">
-          <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-4">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 font-bold">
-                <div className="size-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center text-primary-foreground">
-                  M
+            <footer className="w-full border-t border-border/30 bg-background/40 backdrop-blur-sm">
+        <div className="container px-4 py-8 md:px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+            
+            {/* Brand */}
+            <motion.div 
+              className="flex items-center gap-3"
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="relative group">
+                <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary to-primary/70 blur-sm opacity-0 transition-opacity duration-300 group-hover:opacity-50"></div>
+                <div className="relative size-10 rounded-xl bg-gradient-to-br from-primary via-primary/90 to-primary/70 flex items-center justify-center text-primary-foreground shadow-lg border border-primary/20">
+                  <span className="text-lg font-bold">M</span>
                 </div>
-                <span>Memealert</span>
               </div>
-              <p className="text-muted-foreground">Never Miss a Pump or Dump While You Sleep.</p>
-            </div>
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold">Product</h4>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
-                    Features
-                  </Link>
-                </li>
-                <li>
-                  <Link href="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
-                    How It Works
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
-                    Dashboard
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold">Help</h4>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link href="#faq" className="text-muted-foreground hover:text-foreground transition-colors">
-                    FAQ
-                  </Link>
-                </li>
-                <li>
-                  <Link href="mailto:support@memealert.app" className="text-muted-foreground hover:text-foreground transition-colors">
-                    Support
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold">Legal</h4>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <Link href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                    Privacy Policy
-                  </Link>
-                </li>
-                <li>
-                  <Link href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                    Terms of Service
-                  </Link>
-                </li>
-                <li>
-                  <Link href="#" className="text-muted-foreground hover:text-foreground transition-colors">
-                    Cookie Policy
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-          <div className="flex flex-col gap-4 sm:flex-row justify-between items-center border-t border-border/40 pt-8">
-            <p className="text-xs text-muted-foreground">
-              &copy; {new Date().getFullYear()} Memealert. All rights reserved.
-            </p>
-            <div className="flex gap-4">
-              <Link href="#" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-                Privacy Policy
+              <div className="flex flex-col">
+                <span className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                  Memealert
+                </span>
+                <span className="text-xs text-muted-foreground -mt-1">Never miss a pump or dump</span>
+              </div>
+            </motion.div>
+
+            {/* Links */}
+            <div className="flex items-center gap-8">
+              <Link href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Features
               </Link>
-              <Link href="#" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-                Terms of Service
+              <Link href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                How It Works
               </Link>
-              <Link href="#" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
-                Cookie Policy
+              <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                Dashboard
               </Link>
+              <Link href="#faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                FAQ
+              </Link>
+            </div>
+
+            {/* Copyright */}
+            <div className="text-xs text-muted-foreground">
+              &copy; {new Date().getFullYear()} Memealert
             </div>
           </div>
         </div>
