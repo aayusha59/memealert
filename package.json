@@ -6,7 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "monitor": "node scripts/token-monitor.js"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -45,7 +46,9 @@
     "@solana/web3.js": "^1.98.4",
     "@supabase/supabase-js": "^2.39.7",
     "autoprefixer": "^10.4.20",
+    "chalk": "^4.1.2",
     "class-variance-authority": "^0.7.1",
+    "node-fetch": "^3.3.2",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
