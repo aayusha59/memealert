@@ -50,4 +50,4 @@ Memecoin traders who value time over constant chart watching.
 
 ---
 
-[🚀 **Start Monitoring**](https://memealert.app) • Never miss a pump or dump again
+[🚀 **Start Monitoring**](https://meme-alert.vercel.app) • Never miss a pump or dump again
