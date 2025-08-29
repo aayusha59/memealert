@@ -1,4 +1,4 @@
-# Memealert 🚨
+# Memealert 🚨(WIP)
 
 > **"Wake up to a pump or dump in your sleep. Never watch a chart again."**
 
