@@ -1154,16 +1154,7 @@ export default function Dashboard() {
             >
               <Card className="border border-border/40 rounded-lg bg-gradient-to-b from-background to-muted/10 shadow-lg backdrop-blur transition-all hover:shadow-xl">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl">Alerts</CardTitle>
-                    <button 
-                      onClick={() => setViewingMetrics(true)} 
-                      className="px-3 py-1 bg-muted rounded-md text-xs flex items-center gap-1 hover:bg-muted/80 transition-colors"
-                    >
-                      <Eye className="size-3" />
-                      View Metrics
-                    </button>
-                  </div>
+                  <CardTitle className="text-xl">Alerts</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {alerts.length === 0 ? (
@@ -1684,6 +1675,7 @@ export default function Dashboard() {
                               <div className={`font-medium ${alert.change24h >= 0 ? "text-green-500" : "text-red-500"}`}>
                                 {alert.change24h >= 0 ? "+" : ""}{alert.change24h}%
                               </div>
+
                             </div>
                             <div>
                               <div className="text-muted-foreground">24h Volume</div>
@@ -1834,3 +1826,4 @@ export default function Dashboard() {
     </div>
   )
 }
+
