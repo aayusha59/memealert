@@ -339,9 +339,9 @@ export default function Dashboard() {
       price: selectedToken.price,
       notificationsEnabled: true,
       notificationChannels: {
-        pushEnabled: true,
-        smsEnabled: false,
-        callsEnabled: false,
+        pushEnabled: contextPushEnabled ?? true,
+        smsEnabled: contextSmsEnabled ?? false,
+        callsEnabled: contextCallsEnabled ?? false,
       },
       metrics: {
         marketCapEnabled: marketCapEnabled,
@@ -439,6 +439,8 @@ export default function Dashboard() {
   }
 
   const editAlert = (alert: Alert) => {
+    console.log('🔧 Opening edit modal for alert:', alert.ticker, 'Channels:', alert.notificationChannels);
+    
     if (viewingMetrics) {
       setViewingMetrics(false)
       setReturnToMetrics(true)
@@ -454,11 +456,15 @@ export default function Dashboard() {
       volumeThreshold: 100000,
       volumePeriod: "24 hours"
     })
-    setEditingAlertChannels(alert.notificationChannels || {
+    
+    const channels = alert.notificationChannels || {
       pushEnabled: true,
       smsEnabled: false,
       callsEnabled: false,
-    })
+    };
+    
+    console.log('🔧 Setting editing channels to:', channels);
+    setEditingAlertChannels(channels)
   }
 
   const saveAlertChanges = async () => {
@@ -467,6 +473,10 @@ export default function Dashboard() {
       return;
     }
 
+    console.log('💾 Saving alert changes for:', editingAlert.ticker);
+    console.log('💾 Channels to save:', editingAlertChannels);
+    console.log('💾 Metrics to save:', editingAlertMetrics);
+
     try {
       // Update metrics in database and context
       await updateContextAlertMetrics(editingAlert.id, editingAlertMetrics);
@@ -474,8 +484,13 @@ export default function Dashboard() {
       // Update notification channels in database and context
       await updateContextAlertChannels(editingAlert.id, editingAlertChannels);
       
+      // Force refresh alerts to ensure frontend reflects the changes immediately
+      await reloadAlerts();
+      
+      console.log('✅ Alert changes saved successfully');
       toast.success("Alert updated successfully");
     } catch (error) {
+      console.error('❌ Error saving alert changes:', error);
       toast.error("Failed to update alert");
       console.error("Error updating alert:", error);
     }
@@ -503,6 +518,8 @@ export default function Dashboard() {
   const handleAlertChannelChange = (channel: 'push' | 'sms' | 'calls', enabled: boolean) => {
     if (!editingAlertChannels) return;
     
+    console.log('🔧 Channel change requested:', channel, enabled, 'Current channels:', editingAlertChannels);
+    
     // Check if trying to enable SMS or Calls without phone verification
     if ((channel === 'sms' || channel === 'calls') && enabled && !phoneVerified) {
       toast.error(`Phone verification required to enable ${channel.toUpperCase()} notifications for this alert`);
@@ -514,6 +531,7 @@ export default function Dashboard() {
       [`${channel}Enabled`]: enabled
     };
     
+    console.log('🔧 Updated channels:', updatedChannels);
     setEditingAlertChannels(updatedChannels);
   }
 
