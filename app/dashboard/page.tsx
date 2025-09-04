@@ -37,6 +37,7 @@ import { toast } from "sonner"
 import { DatabaseTest } from "@/components/DatabaseTest"
 import { WalletConnectButton } from "@/components/WalletConnectButton"
 import { PhoneVerification } from "@/components/Settings/PhoneVerification"
+import { TestNotifications } from "@/components/TestNotifications"
 
 import { deleteUserAlert, saveNotificationSettings, updateAlertNotificationStatus, cleanupDuplicateAlertMetrics, cleanupDuplicateNotificationSettings } from "@/lib/supabase"
 
@@ -73,8 +74,10 @@ interface Alert {
     marketCapHigh: number
     marketCapLow: number
     priceChangeThreshold: number
+    priceChangeDirection?: string
     volumeThreshold: number
     volumePeriod: string
+    volumeDirection?: string
   }
 }
 
@@ -233,6 +236,11 @@ export default function Dashboard() {
   const [priceChange, setPriceChange] = useState([20])
   const [volumePeriod, setVolumePeriod] = useState("5m")
   const [volumeThreshold, setVolumeThreshold] = useState(100000)
+  const [priceChangeDirection, setPriceChangeDirection] = useState('both')
+  const [volumeDirection, setVolumeDirection] = useState('increase')
+  
+  // Live price update states
+  const [isUpdatingPrices, setIsUpdatingPrices] = useState(false)
 
 
 
@@ -252,6 +260,70 @@ export default function Dashboard() {
   const [showVerificationPrompt, setShowVerificationPrompt] = useState(false)
   const [pendingNotificationType, setPendingNotificationType] = useState<'sms' | 'calls' | null>(null)
   const [isAddingAlert, setIsAddingAlert] = useState(false)
+
+  // Fetch live token data for alerts
+  const fetchLiveTokenData = async (tokenAddress: string) => {
+    try {
+      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`)
+      const data = await response.json()
+
+      if (!data.pairs || data.pairs.length === 0) {
+        return null
+      }
+
+      // Find the best Solana pair
+      const solanaPairs = data.pairs.filter((pair: any) => pair.chainId === 'solana')
+      if (solanaPairs.length === 0) {
+        return null
+      }
+
+      const bestPair = solanaPairs.reduce((best: any, current: any) => {
+        const bestLiquidity = parseFloat(best.liquidity?.usd) || 0
+        const currentLiquidity = parseFloat(current.liquidity?.usd) || 0
+        return currentLiquidity > bestLiquidity ? current : best
+      })
+
+      return {
+        price: parseFloat(bestPair.priceUsd) || 0,
+        change24h: parseFloat(bestPair.priceChange?.h24) || 0,
+        marketCap: parseFloat(bestPair.marketCap) || 0,
+        volume24h: parseFloat(bestPair.volume?.h24) || 0
+      }
+    } catch (error) {
+      console.error(`Error fetching live data for ${tokenAddress}:`, error)
+      return null
+    }
+  }
+
+  // Update live prices for all alerts
+  const updateLivePrices = async () => {
+    if (alerts.length === 0 || isUpdatingPrices) return
+    
+    setIsUpdatingPrices(true)
+    const updatedAlerts = [...alerts]
+
+    for (let i = 0; i < updatedAlerts.length; i++) {
+      const alert = updatedAlerts[i]
+      const liveData = await fetchLiveTokenData(alert.contractAddress)
+      
+      if (liveData) {
+        // Update alert with new data
+        updatedAlerts[i] = {
+          ...alert,
+          marketCap: liveData.marketCap,
+          change24h: liveData.change24h,
+          volume24h: liveData.volume24h,
+          price: liveData.price
+        }
+      }
+      
+      // Small delay between API calls to respect rate limits
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+
+    setAlerts(updatedAlerts)
+    setIsUpdatingPrices(false)
+  }
 
   const searchTokens = async (query: string) => {
     if (!query.trim()) {
@@ -350,8 +422,10 @@ export default function Dashboard() {
         marketCapHigh: marketCapHigh[0],
         marketCapLow: marketCapLow[0],
         priceChangeThreshold: priceChange[0],
+        priceChangeDirection: priceChangeDirection,
         volumeThreshold: volumeThreshold,
         volumePeriod: volumePeriod,
+        volumeDirection: volumeDirection,
       },
     }
 
@@ -453,8 +527,10 @@ export default function Dashboard() {
       marketCapHigh: 1000000,
       marketCapLow: 500000,
       priceChangeThreshold: 20,
+      priceChangeDirection: 'both',
       volumeThreshold: 100000,
-      volumePeriod: "24 hours"
+      volumePeriod: "24 hours",
+      volumeDirection: 'increase'
     })
     
     const channels = alert.notificationChannels || {
@@ -592,6 +668,21 @@ export default function Dashboard() {
       hasLocalStorage: !!localStorage.getItem("connectedWallet")
     })
   }, [isWalletConnected, userId, isLoading, walletAlerts])
+
+  // Set up live price updates every 5 seconds
+  useEffect(() => {
+    if (!isWalletConnected || alerts.length === 0) return
+
+    // Initial update
+    updateLivePrices()
+
+    // Set up interval for live updates
+    const interval = setInterval(() => {
+      updateLivePrices()
+    }, 5000) // Update every 5 seconds
+
+    return () => clearInterval(interval)
+  }, [isWalletConnected, alerts.length])
 
   // Show loading state only if we have no wallet connection and no data
   if (isLoading && !isWalletConnected && !walletAlerts?.length) {
@@ -1044,6 +1135,16 @@ export default function Dashboard() {
                       step={100000}
                       className="w-full"
                     />
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">Custom value:</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-muted/50 border-border/40" 
+                        placeholder="Enter custom market cap" 
+                        value={marketCapHigh[0]} 
+                        onChange={(e) => setMarketCapHigh([parseInt(e.target.value) || 100000])}
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-3">
@@ -1059,6 +1160,16 @@ export default function Dashboard() {
                       step={10000}
                       className="w-full"
                     />
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">Custom value:</Label>
+                      <Input 
+                        type="number" 
+                        className="bg-muted/50 border-border/40" 
+                        placeholder="Enter custom market cap" 
+                        value={marketCapLow[0]} 
+                        onChange={(e) => setMarketCapLow([parseInt(e.target.value) || 10000])}
+                      />
+                    </div>
                   </div>
                 </CardContent>
               )}
@@ -1080,17 +1191,57 @@ export default function Dashboard() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">Notify on ±{priceChange[0]}% change</Label>
-                      <span className="text-sm font-mono">±{priceChange[0]}%</span>
+                      <Label className="text-sm font-medium">Change threshold</Label>
+                      <span className="text-sm font-mono">{priceChange[0]}%</span>
                     </div>
                     <Slider
                       value={priceChange}
                       onValueChange={setPriceChange}
                       max={100}
-                      min={5}
-                      step={5}
+                      min={0.1}
+                      step={0.1}
                       className="w-full"
                     />
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">Custom value (%):</Label>
+                      <Input 
+                        type="number" 
+                        step="0.01"
+                        className="bg-muted/50 border-border/40" 
+                        placeholder="Enter custom percentage" 
+                        value={priceChange[0]} 
+                        onChange={(e) => setPriceChange([parseFloat(e.target.value) || 0.1])}
+                      />
+                    </div>
+                    <div className="pt-2">
+                      <Label className="text-xs text-muted-foreground mb-2 block">Direction:</Label>
+                      <div className="flex gap-2">
+                                                  <Button 
+                            type="button" 
+                            variant={priceChangeDirection === 'both' ? "default" : "outline"} 
+                            className="flex-1 text-xs h-9"
+                            onClick={() => setPriceChangeDirection('both')}
+                          >
+                            Pump/Dump
+                          </Button>
+                          <Button 
+                            type="button" 
+                            variant={priceChangeDirection === 'pump' ? "default" : "outline"} 
+                            className="flex-1 text-xs h-9 text-green-500"
+                            onClick={() => setPriceChangeDirection('pump')}
+                          >
+                            Pump
+                          </Button>
+                          <Button 
+                            type="button" 
+                            variant={priceChangeDirection === 'dump' ? "default" : "outline"} 
+                            className="flex-1 text-xs h-9 text-red-500"
+                            onClick={() => setPriceChangeDirection('dump')}
+                          >
+                            Dump
+                          </Button>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               )}
@@ -1139,6 +1290,37 @@ export default function Dashboard() {
                         step={1000}
                         className="w-full"
                       />
+                      <div className="mt-3">
+                        <Label className="text-xs text-muted-foreground mb-1 block">Custom value:</Label>
+                        <Input 
+                          type="number" 
+                          className="bg-muted/50 border-border/40" 
+                          placeholder="Enter custom volume" 
+                          value={volumeThreshold} 
+                          onChange={(e) => setVolumeThreshold(parseInt(e.target.value) || 1000)}
+                        />
+                      </div>
+                      <div className="mt-3">
+                        <Label className="text-xs text-muted-foreground mb-2 block">Direction:</Label>
+                        <div className="flex gap-2">
+                          <Button 
+                            type="button" 
+                            variant={volumeDirection === 'increase' ? "default" : "outline"} 
+                            className="flex-1 text-xs h-9"
+                            onClick={() => setVolumeDirection('increase')}
+                          >
+                            &gt; Increase
+                          </Button>
+                          <Button 
+                            type="button" 
+                            variant={volumeDirection === 'decrease' ? "default" : "outline"} 
+                            className="flex-1 text-xs h-9"
+                            onClick={() => setVolumeDirection('decrease')}
+                          >
+                            &lt; Decrease
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -1156,13 +1338,12 @@ export default function Dashboard() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl">Alerts</CardTitle>
-                    <button 
-                      onClick={() => setViewingMetrics(true)} 
-                      className="px-3 py-1 bg-muted rounded-md text-xs flex items-center gap-1 hover:bg-muted/80 transition-colors"
-                    >
-                      <Eye className="size-3" />
-                      View Metrics
-                    </button>
+                    {isUpdatingPrices && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <RefreshCw className="size-3 animate-spin" />
+                        <span>Updating prices...</span>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1347,6 +1528,18 @@ export default function Dashboard() {
                   </div>
                 </div>
 
+                {/* Test Notifications Section */}
+                <div className="rounded-xl border border-border/40 bg-gradient-to-br from-background to-muted/20 backdrop-blur-sm shadow-lg overflow-hidden">
+                  <div className="p-6">
+                    <TestNotifications 
+                      userId={userId || undefined} 
+                      userPhone={phoneNumber || undefined} 
+                      isPhoneVerified={!!phoneVerified}
+                      userAlerts={alerts}
+                    />
+                  </div>
+                </div>
+
                 {/* Wallet Info Section */}
                 <div className="p-6 rounded-xl border border-border/40 bg-gradient-to-br from-background to-muted/20 backdrop-blur-sm shadow-lg">
                   <div className="flex items-center gap-3 mb-6">
@@ -1520,8 +1713,8 @@ export default function Dashboard() {
                     {editingAlertMetrics.priceChangeEnabled && (
                       <div className="pl-4">
                         <div className="flex justify-between text-sm mb-2">
-                          <span>Notify on ±{editingAlertMetrics.priceChangeThreshold}% change</span>
-                          <span>±{editingAlertMetrics.priceChangeThreshold}%</span>
+                          <span>Change threshold</span>
+                          <span>{editingAlertMetrics.priceChangeThreshold}%</span>
                         </div>
                         <Slider
                           value={[editingAlertMetrics.priceChangeThreshold || 20]}
@@ -1529,9 +1722,61 @@ export default function Dashboard() {
                             setEditingAlertMetrics({ ...editingAlertMetrics, priceChangeThreshold: value })
                           }
                           max={100}
-                          min={5}
-                          step={5}
+                          min={0.1}
+                          step={0.1}
                         />
+                        <div className="mt-3">
+                          <Label className="text-xs text-muted-foreground mb-1 block">Custom value (%):</Label>
+                          <Input 
+                            type="number" 
+                            step="0.01"
+                            className="bg-muted/50 border-border/40" 
+                            placeholder="Enter custom percentage" 
+                            value={editingAlertMetrics.priceChangeThreshold} 
+                            onChange={(e) => setEditingAlertMetrics({ 
+                              ...editingAlertMetrics, 
+                              priceChangeThreshold: parseFloat(e.target.value) || 0.1 
+                            })}
+                          />
+                        </div>
+                        <div className="mt-3">
+                          <Label className="text-xs text-muted-foreground mb-2 block">Direction:</Label>
+                          <div className="flex gap-2">
+                            <Button 
+                              type="button" 
+                              variant={editingAlertMetrics.priceChangeDirection === 'both' ? "default" : "outline"} 
+                              className="flex-1 text-xs h-9"
+                              onClick={() => setEditingAlertMetrics({ 
+                                ...editingAlertMetrics, 
+                                priceChangeDirection: 'both' 
+                              })}
+                            >
+                              Pump/Dump
+                            </Button>
+                            <Button 
+                              type="button" 
+                              variant={editingAlertMetrics.priceChangeDirection === 'pump' ? "default" : "outline"} 
+                              className="flex-1 text-xs h-9 text-green-500"
+                              onClick={() => setEditingAlertMetrics({ 
+                                ...editingAlertMetrics, 
+                                priceChangeDirection: 'pump' 
+                              })}
+                            >
+                              Pump
+                            </Button>
+                            <Button 
+                              type="button" 
+                              variant={editingAlertMetrics.priceChangeDirection === 'dump' ? "default" : "outline"} 
+                              className="flex-1 text-xs h-9 text-red-500"
+                              onClick={() => setEditingAlertMetrics({ 
+                                ...editingAlertMetrics, 
+                                priceChangeDirection: 'dump' 
+                              })}
+                            >
+                              Dump
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1585,6 +1830,46 @@ export default function Dashboard() {
                             min={1000}
                             step={1000}
                           />
+                          <div className="mt-3">
+                            <Label className="text-xs text-muted-foreground mb-1 block">Custom value:</Label>
+                            <Input 
+                              type="number" 
+                              className="bg-muted/50 border-border/40" 
+                              placeholder="Enter custom volume" 
+                              value={editingAlertMetrics.volumeThreshold} 
+                              onChange={(e) => setEditingAlertMetrics({ 
+                                ...editingAlertMetrics, 
+                                volumeThreshold: parseInt(e.target.value) || 1000 
+                              })}
+                            />
+                          </div>
+                          <div className="mt-3">
+                            <Label className="text-xs text-muted-foreground mb-2 block">Direction:</Label>
+                            <div className="flex gap-2">
+                              <Button 
+                                type="button" 
+                                variant={editingAlertMetrics.volumeDirection === 'increase' ? "default" : "outline"} 
+                                className="flex-1 text-xs h-9"
+                                onClick={() => setEditingAlertMetrics({ 
+                                  ...editingAlertMetrics, 
+                                  volumeDirection: 'increase' 
+                                })}
+                              >
+                                &gt; Increase
+                              </Button>
+                              <Button 
+                                type="button" 
+                                variant={editingAlertMetrics.volumeDirection === 'decrease' ? "default" : "outline"} 
+                                className="flex-1 text-xs h-9"
+                                onClick={() => setEditingAlertMetrics({ 
+                                  ...editingAlertMetrics, 
+                                  volumeDirection: 'decrease' 
+                                })}
+                              >
+                                &lt; Decrease
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1684,6 +1969,7 @@ export default function Dashboard() {
                               <div className={`font-medium ${alert.change24h >= 0 ? "text-green-500" : "text-red-500"}`}>
                                 {alert.change24h >= 0 ? "+" : ""}{alert.change24h}%
                               </div>
+
                             </div>
                             <div>
                               <div className="text-muted-foreground">24h Volume</div>
@@ -1834,3 +2120,4 @@ export default function Dashboard() {
     </div>
   )
 }
+
