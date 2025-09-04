@@ -38,6 +38,50 @@ export async function sendVerificationCode(phoneNumber: string, code: string): P
   }
 }
 
+// Send SMS alert
+export async function sendSMSAlert(phoneNumber: string, message: string): Promise<boolean> {
+  if (!client) {
+    console.error('❌ Twilio client not initialized')
+    throw new Error('SMS service not configured')
+  }
+
+  try {
+    const sms = await client.messages.create({
+      body: message,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: phoneNumber
+    })
+
+    console.log('✅ SMS alert sent successfully:', sms.sid)
+    return true
+  } catch (error) {
+    console.error('❌ Error sending SMS alert:', error)
+    throw error
+  }
+}
+
+// Make voice call alert
+export async function makeVoiceCall(phoneNumber: string, message: string): Promise<boolean> {
+  if (!client) {
+    console.error('❌ Twilio client not initialized')
+    throw new Error('Voice call service not configured')
+  }
+
+  try {
+    const call = await client.calls.create({
+      twiml: `<Response><Say voice="alice">${message}</Say></Response>`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: phoneNumber
+    })
+
+    console.log('✅ Voice call initiated successfully:', call.sid)
+    return true
+  } catch (error) {
+    console.error('❌ Error making voice call:', error)
+    throw error
+  }
+}
+
 // Store verification codes in memory (in production, use Redis or database)
 const verificationCodes = new Map<string, { code: string; timestamp: number; phoneNumber: string }>()
 
