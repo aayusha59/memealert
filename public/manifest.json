@@ -1,0 +1,10 @@
+{
+  "name": "Memealert - Token Alert System",
+  "short_name": "Memealert",
+  "description": "Real-time Solana token alerts and monitoring",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary"
+}
