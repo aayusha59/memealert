@@ -325,7 +325,8 @@ async function sendNotification(trigger) {
     }
 
     // Make HTTP request to notification API
-    const response = await fetch('http://localhost:3000/api/alerts/process', {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`
+    const response = await fetch(`${baseUrl}/api/alerts/process`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
